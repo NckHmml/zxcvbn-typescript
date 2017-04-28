@@ -230,7 +230,9 @@ export const ADJACENCY_GRAPHS = {
     "=": [null, null, null, null, "/", "9", "8", "7"]
   }
 };
-export const L33T_TABLE = {
+export const L33T_TABLE: {
+  [key: string]: Array<string>
+} = {
   a: ["4", "@"],
   b: ["8"],
   c: ["(", "{", "[", "<"],

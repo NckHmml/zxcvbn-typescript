@@ -5,12 +5,22 @@ const webpack = require("webpack");
 
 gulp.task("tslint", () => {
   return gulp
-    .src(["./src/**/*.ts", "!./src/**/*.d.ts"])
+    .src("./src/**/*.ts")
     .pipe(tslint())
     .pipe(tslint.report({
       summarizeFailureOutput: true
     }));
 });
+
+gulp.task("debug", () => {
+  gulp.watch("./src/**/*.ts", ["tslint"]);
+  
+  return webpack(config.webpack_debug, (error, stats) => {
+    if (error) {
+      console.error(error);
+    }
+  });
+})
 
 gulp.task("release", (callback) => {  
   return webpack(config.webpack_release, (error, stats) => {

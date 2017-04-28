@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 1);
+/******/ 	return __webpack_require__(__webpack_require__.s = 4);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -83,115 +83,18 @@ return /******/ (function(modules) { // webpackBootstrap
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-var lists_1 = __webpack_require__(2);
-var Matching = (function () {
-    function Matching() {
-        var _this = this;
-        this.RankedDictionaries = {};
-        /**
-         * Dictionary match (common passwords, english, last names, etc)
-         */
-        this.dictionaryMatch = function (password) {
-            var matches = new Array();
-            var passwordLower = password.toLowerCase();
-            for (var dictionaryName in _this.RankedDictionaries) {
-                var rankedDict = _this.RankedDictionaries[dictionaryName];
-                for (var i = 0; i < password.length; i++) {
-                    for (var j = i; j < password.length; j++) {
-                        var word = passwordLower.slice(i, j + 1);
-                        if (word in rankedDict) {
-                            var rank = rankedDict[word];
-                            matches.push({
-                                pattern: "dictionary",
-                                i: i,
-                                j: j,
-                                token: password.slice(i, j + 1),
-                                matchedWord: word,
-                                rank: rank,
-                                dictionaryName: dictionaryName,
-                                reversed: false,
-                                l33t: false
-                            });
-                        }
-                    }
-                }
-            }
-            return _this.sorted(matches);
-        };
-        /**
-         * Dictionary match, reversed (common passwords, english, last names, etc)
-         */
-        this.reverseDictionaryMatch = function (password) {
-            var reversed_password = password.split("").reverse().join("");
-            var matches = _this.dictionaryMatch(reversed_password);
-            var ref;
-            matches.forEach(function (match) {
-                // Map coordinates back to original string
-                ref = {
-                    i: password.length - 1 - match.j,
-                    j: password.length - 1 - match.i
-                };
-                match.i = ref.i;
-                match.j = ref.j;
-                // Reverse back
-                match.token = match.token.split("").reverse().join("");
-                match.reversed = true;
-            });
-            return _this.sorted(matches);
-        };
-        // Loads the json if it's an external build
-        if (lists_1.FREQUENCY_LIST === undefined) {
-            // ToDo: magically load frequency_list.json
-            console.log("ToDo: magically load frequency_list.json at:", Matching.frequencyList);
-        }
-        // Build the ranked dictionary
-        for (var name_1 in lists_1.FREQUENCY_LIST) {
-            var list = lists_1.FREQUENCY_LIST[name_1].split(",");
-            this.RankedDictionaries[name_1] = this.buildRankedDictionary(list);
-        }
-    }
-    /**
-     * Builds the ranked dictionary
-     */
-    Matching.prototype.buildRankedDictionary = function (orderedList) {
-        var result = {};
-        orderedList.forEach(function (word, index) {
-            result[word] = index;
-        });
-        return result;
-    };
-    /**
-     * Sorts matches
-     */
-    Matching.prototype.sorted = function (matches) {
-        // sort on i primary, j secondary
-        return matches.sort(function (m1, m2) {
-            return (m1.i - m2.i) || (m1.j - m2.j);
-        });
-    };
-    /**
-     * Appends the user input to the dictionaries
-     * @param orderedList A list of ordered words
-     */
-    Matching.prototype.setUserInputDictionary = function (orderedList) {
-        return this.RankedDictionaries["user_inputs"] = this.buildRankedDictionary(orderedList.slice());
-    };
-    /**
-     * Runs all passwords matches
-     * @param password password to match with
-     */
-    Matching.prototype.omnimatch = function (password) {
-        var matchers = [this.dictionaryMatch, this.reverseDictionaryMatch];
-        // Run matchers
-        var matches = matchers
-            .map(function (matcher) { return matcher(password); })
-            .reduce(function (previous, next) { return previous.concat(next); });
-        return this.sorted(matches);
-    };
-    return Matching;
-}());
-Matching.frequencyList = "frequency_list.json";
-exports.Matching = Matching;
+exports.BRUTEFORCE_CARDINALITY = 10;
+exports.MIN_GUESSES_BEFORE_GROWING_SEQUENCE = 10000;
+exports.MIN_SUBMATCH_GUESSES_SINGLE_CHAR = 10;
+exports.MIN_SUBMATCH_GUESSES_MULTI_CHAR = 50;
+exports.MAX_DELTA = 5;
+exports.REGEX_RECENT_YEAR = /19\d\d|200\d|201\d/g;
+exports.REGEX_START = /[az019]/i;
+exports.REGEX_DIGIT = /\d/;
+exports.REGEX_SHIFTED = /[~!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL: "ZXCVBNM<>?]/;
+exports.REGEX_SEQUENCE_LOWER = /^[a-z]+$/;
+exports.REGEX_SEQUENCE_UPPER = /^[A-Z]+$/;
+exports.REGEX_SEQUENCE_DIGIT = /^\d+$/;
 
 
 /***/ }),
@@ -201,34 +104,21 @@ exports.Matching = Matching;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-var matching_1 = __webpack_require__(0);
-var Zxcvbn = (function () {
-    function Zxcvbn() {
+var Helpers = (function () {
+    function Helpers() {
     }
     /**
-     * Checks the strength of a password
-     * @param password password to check
-     * @param user_inputs additional dictionary information
+     * Sorts matches
+     * @summary sort on i primary, j secondary
      */
-    Zxcvbn.check = function (password, user_inputs) {
-        if (user_inputs === void 0) { user_inputs = []; }
-        var start = new Date().getTime();
-        // Sanitize and set user inputs
-        user_inputs = user_inputs.map(function (input) { return input.toLowerCase(); });
-        Zxcvbn.matching.setUserInputDictionary(user_inputs);
-        // Get matches
-        var matches = Zxcvbn.matching.omnimatch(password);
-        console.log(matches);
-        var calc_time = new Date().getTime() - start;
-        return {
-            feedback: "none",
-            calc_time: calc_time
-        };
+    Helpers.sortMatches = function (matches) {
+        return matches.sort(function (m1, m2) {
+            return (m1.i - m2.i) || (m1.j - m2.j);
+        });
     };
-    return Zxcvbn;
+    return Helpers;
 }());
-Zxcvbn.matching = new matching_1.Matching();
-exports.Zxcvbn = Zxcvbn;
+exports.Helpers = Helpers;
 
 
 /***/ }),
@@ -489,6 +379,928 @@ exports.DATE_SPLITS = {
     7: [[1, 3], [2, 3], [4, 5], [4, 6]],
     8: [[2, 4], [4, 6]]
 };
+
+
+/***/ }),
+/* 3 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var bruteforce_1 = __webpack_require__(14);
+var repeat_1 = __webpack_require__(15);
+var sequence_1 = __webpack_require__(16);
+var Scoring = (function () {
+    function Scoring() {
+    }
+    /** guess estimation -- one function per match pattern */
+    Scoring.estimateGuesses = function (password, match) {
+        // a match's guess estimate doesn't change. cache it.
+        if (match.guesses)
+            return match.guesses;
+        var minGuesses = 1;
+        if (match.token.length < password.length)
+            minGuesses = match.token.length == 1 ? constants_1.MIN_SUBMATCH_GUESSES_SINGLE_CHAR : constants_1.MIN_SUBMATCH_GUESSES_MULTI_CHAR;
+        match.guesses = this.estimationFunctions[match.pattern].estimate(match);
+        match.guessesLog10 = Scoring.log10(match.guesses);
+        return match.guesses;
+    };
+    Scoring.spatialGuesses = function (match) {
+        return 0;
+    };
+    Scoring.regexGuesses = function (match) {
+        return 0;
+    };
+    Scoring.dateGuesses = function (match) {
+        return 0;
+    };
+    /**
+     * search most guessable match sequence
+     * @summary takes a sequence of overlapping matches, returns the non-overlapping sequence with
+     * minimum guesses. the following is a O(l_max * (n + m)) dynamic programming algorithm
+     * for a length-n password with m candidate matches. l_max is the maximum optimal
+     * sequence length spanning each prefix of the password. In practice it rarely exceeds 5 and the
+     * search terminates rapidly.
+     *
+     * the optimal "minimum guesses" sequence is here defined to be the sequence that
+     * minimizes the following function:
+     *
+     *    g = l! * Product(m.guesses for m in sequence) + D^(l - 1)
+     *
+     * where l is the length of the sequence.
+     *
+     * the factorial term is the number of ways to order l patterns.
+     *
+     * the D^(l-1) term is another length penalty, roughly capturing the idea that an
+     * attacker will try lower-length sequences first before trying length-l sequences.
+     *
+     * for example, consider a sequence that is date-repeat-dictionary.
+     *  - an attacker would need to try other date-repeat-dictionary combinations,
+     *    hence the product term.
+     *  - an attacker would need to try repeat-date-dictionary, dictionary-repeat-date,
+     *    ..., hence the factorial term.
+     *  - an attacker would also likely try length-1 (dictionary) and length-2 (dictionary-date)
+     *    sequences before length-3. assuming at minimum D guesses per pattern type,
+     *    D^(l-1) approximates Sum(D^i for i in [1..l-1]
+     */
+    Scoring.mostGuessableMatchSequence = function (password, matches, excludeAdditive) {
+        var _this = this;
+        if (excludeAdditive === void 0) { excludeAdditive = false; }
+        var n = password.length;
+        // partition matches into sublists according to ending index j
+        var matchesByJ = Array.apply({}, new Array(n)).map(function (i) { return []; });
+        matches.forEach(function (match) { return matchesByJ[match.j].push(match); });
+        // small detail: for deterministic output, sort each sublist by i.
+        matchesByJ.forEach(function (list) { return list.sort(function (m1, m2) { return m1.i - m2.i; }); });
+        var optimal = {
+            // optimal.m[k][l] holds final match in the best length-l match sequence covering the
+            // password prefix up to k, inclusive.
+            // if there is no length-l sequence that scores better (fewer guesses) than
+            // a shorter match sequence spanning the same prefix, optimal.m[k][l] is undefined.
+            m: Array.apply({}, new Array(n)),
+            // same structure as optimal.m -- holds the product term Prod(m.guesses for m in sequence).
+            // optimal.pi allows for fast (non-looping) updates to the minimization function.
+            pi: Array.apply({}, new Array(n)),
+            // same structure as optimal.m -- holds the overall metric.
+            g: Array.apply({}, new Array(n))
+        };
+        // helper: considers whether a length-l sequence ending at match m is better (fewer guesses)
+        // than previously encountered sequences, updating state if so.
+        var update = function (match, l) {
+            var k = match.j;
+            var pi = _this.estimateGuesses(password, match);
+        };
+        return {
+            sequence: undefined,
+            guesses: 0
+        };
+    };
+    return Scoring;
+}());
+Scoring.estimationFunctions = {
+    "bruteforce": new bruteforce_1.BruteforceCalculator(),
+    "repeat": new repeat_1.RepeatCalculator(),
+    "sequence": new sequence_1.SequenceCalculator()
+    // "bruteforce": this.bruteforceGuesses,
+    // "dictionary": this.dictionaryGuesses,
+    // "spatial": this.spatialGuesses,
+    // "repeat": this.repeatGuesses,
+    // "sequence": this.sequenceGuesses,
+    // "regex": this.regexGuesses,
+    // "date": this.dateGuesses
+};
+Scoring.nCk = function (n, k) {
+    // http://blog.plover.com/math/choose.html
+    if (k > n)
+        return 0;
+    if (k === 0)
+        return 1;
+    var r = 1;
+    for (var d = 1; d < k; d++) {
+        r *= n;
+        r /= d;
+        n -= 1;
+    }
+    return r;
+};
+Scoring.log10 = function (n) {
+    return Math.log(n) / Math.log(10);
+};
+Scoring.log2 = function (n) {
+    return Math.log(n) / Math.log(2);
+};
+/** unoptimized, called only on small n */
+Scoring.factorial = function (n) {
+    if (n < 2)
+        return 1;
+    var f = 1;
+    for (var i = 2; i < n; i++)
+        f *= i;
+    return f;
+};
+exports.Scoring = Scoring;
+
+
+/***/ }),
+/* 4 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var config_1 = __webpack_require__(6);
+var matching_1 = __webpack_require__(7);
+var scoring_1 = __webpack_require__(3);
+var Zxcvbn = (function () {
+    function Zxcvbn() {
+    }
+    Object.defineProperty(Zxcvbn, "matching", {
+        get: function () {
+            // Lazy loading
+            if (!this._matching)
+                this._matching = new matching_1.Matching();
+            return this._matching;
+        },
+        set: function (instance) {
+            this._matching = instance;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * Checks the strength of a password
+     * @param password password to check
+     * @param userInputs additional dictionary information
+     */
+    Zxcvbn.check = function (password, userInputs) {
+        if (userInputs === void 0) { userInputs = []; }
+        var start = new Date().getTime();
+        // Sanitize and set user inputs
+        userInputs = userInputs.map(function (input) { return input.toLowerCase(); });
+        this.matching.setUserInputDictionary(userInputs);
+        // Get matches
+        var matches = this.matching.omnimatch(password);
+        console.log(matches);
+        // Get result
+        var result = scoring_1.Scoring.mostGuessableMatchSequence(password, matches);
+        result.feedback = "none";
+        result.calc_time = new Date().getTime() - start;
+        return result;
+    };
+    return Zxcvbn;
+}());
+// Expose config
+Zxcvbn.config = config_1.Config;
+exports.Zxcvbn = Zxcvbn;
+
+
+/***/ }),
+/* 5 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = __webpack_require__(1);
+/**
+ * Dictionary match (common passwords, english, last names, etc)
+ */
+var DictionaryMatcher = (function () {
+    function DictionaryMatcher(rankedDictionaries) {
+        this.rankedDictionaries = rankedDictionaries;
+    }
+    DictionaryMatcher.prototype.match = function (password) {
+        var matches = new Array();
+        var passwordLower = password.toLowerCase();
+        var words = new Array();
+        for (var dictionaryName in this.rankedDictionaries) {
+            var rankedDict = this.rankedDictionaries[dictionaryName];
+            for (var i = 0; i < password.length; i++) {
+                for (var j = i; j < password.length; j++) {
+                    var word = passwordLower.slice(i, j + 1);
+                    if (word in rankedDict && !(word in words)) {
+                        var rank = rankedDict[word];
+                        matches.push({
+                            pattern: "dictionary",
+                            i: i,
+                            j: j,
+                            token: password.slice(i, j + 1),
+                            matchedWord: word,
+                            rank: rank,
+                            dictionaryName: dictionaryName,
+                            reversed: false,
+                            l33t: false
+                        });
+                    }
+                }
+            }
+        }
+        return helpers_1.Helpers.sortMatches(matches);
+    };
+    return DictionaryMatcher;
+}());
+exports.DictionaryMatcher = DictionaryMatcher;
+
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Config = {
+    frequencyList: "frequency_list.json"
+};
+
+
+/***/ }),
+/* 7 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var lists_1 = __webpack_require__(2);
+var helpers_1 = __webpack_require__(1);
+var _1 = __webpack_require__(4);
+var dictionary_1 = __webpack_require__(5);
+var reverseDictionary_1 = __webpack_require__(11);
+var l33t_1 = __webpack_require__(8);
+var regex_1 = __webpack_require__(9);
+var repeat_1 = __webpack_require__(10);
+var sequence_1 = __webpack_require__(12);
+var spatial_1 = __webpack_require__(13);
+var Matching = (function () {
+    function Matching(frequencyList) {
+        if (frequencyList === void 0) { frequencyList = lists_1.FREQUENCY_LIST; }
+        this.RankedDictionaries = {};
+        // Loads the json if it's an external build
+        if (frequencyList === undefined) {
+            // ToDo: magically load frequency_list.json
+            console.log("ToDo: magically load frequency_list.json at:", _1.Zxcvbn.config.frequencyList);
+        }
+        // Build the ranked dictionary
+        for (var name_1 in frequencyList) {
+            var list = frequencyList[name_1].split(",");
+            this.RankedDictionaries[name_1] = this.buildRankedDictionary(list);
+        }
+    }
+    /**
+     * Builds the ranked dictionary
+     */
+    Matching.prototype.buildRankedDictionary = function (orderedList) {
+        var result = {};
+        orderedList.forEach(function (word, index) {
+            result[word] = index;
+        });
+        return result;
+    };
+    /**
+     * Appends the user input to the dictionaries
+     * @param orderedList A list of ordered words
+     */
+    Matching.prototype.setUserInputDictionary = function (orderedList) {
+        return this.RankedDictionaries["user_inputs"] = this.buildRankedDictionary(orderedList.slice());
+    };
+    /**
+     * Runs all passwords matches
+     * @param password password to match with
+     */
+    Matching.prototype.omnimatch = function (password) {
+        var dictionaryMatcher = new dictionary_1.DictionaryMatcher(this.RankedDictionaries);
+        var matchers = [
+            dictionaryMatcher,
+            new reverseDictionary_1.ReverseDictionaryMatcher(this.RankedDictionaries),
+            new l33t_1.L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
+            new regex_1.RegexMatcher(),
+            new repeat_1.RepeatMatcher(this),
+            new sequence_1.SequenceMatcher(),
+            new spatial_1.SpatialMatcher()
+        ];
+        // Run matchers
+        var matches = matchers
+            .map(function (matcher) { return matcher.match(password); })
+            .reduce(function (previous, next) { return previous.concat(next); });
+        return helpers_1.Helpers.sortMatches(matches);
+    };
+    return Matching;
+}());
+exports.Matching = Matching;
+
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var helpers_1 = __webpack_require__(1);
+var lists_1 = __webpack_require__(2);
+/**
+ * Dictionary match with common l33t substitutions
+ */
+var L33tMatcher = (function () {
+    function L33tMatcher(rankedDictionaries, dictionaryMatcher) {
+        this.rankedDictionaries = rankedDictionaries;
+        this.dictionaryMatcher = dictionaryMatcher;
+    }
+    /** Makes a pruned copy of l33t_table that only includes password's possible substitutions */
+    L33tMatcher.prototype.relevantL33tSubtable = function (password) {
+        var passwordChrs = password
+            .split("")
+            .reduce(function (container, next) {
+            container[next] = true;
+            return container;
+        }, {});
+        var subTable = {};
+        for (var letter in lists_1.L33T_TABLE) {
+            var subs = lists_1.L33T_TABLE[letter];
+            var relevantSubs = subs.filter(function (sub) { return sub in passwordChrs; });
+            if (relevantSubs.length > 0)
+                subTable[letter] = relevantSubs;
+        }
+        return subTable;
+    };
+    L33tMatcher.prototype.deduplicate = function (subs) {
+        var dedupped = [];
+        var members = {};
+        subs.forEach(function (sub) {
+            var assoc = sub.map(function (value, index) { return [value, index]; });
+            assoc.sort();
+            var label = assoc.map(function (value, index) { return value + "," + index; }).join(",");
+            if (!(label in members)) {
+                members[label] = true;
+                dedupped.push(sub);
+            }
+        });
+        return dedupped;
+    };
+    L33tMatcher.prototype.enumerateL33tSubsHelper = function (keys, subs) {
+        if (!keys.length)
+            return subs;
+        var firstKey = keys.shift();
+        var nextSubs = new Array();
+        lists_1.L33T_TABLE[firstKey].forEach(function (l33t) {
+            subs.forEach(function (sub) {
+                var duplicateL33tIndex = -1;
+                sub.some(function (value, index) {
+                    if (value[0] === l33t) {
+                        duplicateL33tIndex = index;
+                        return true;
+                    }
+                    return false;
+                });
+                if (duplicateL33tIndex === -1) {
+                    var subExtensions = sub.concat([[l33t, firstKey]]);
+                    nextSubs.push(subExtensions);
+                }
+                else {
+                    var subAlternative = sub.slice(0);
+                    subAlternative.splice(duplicateL33tIndex, 1);
+                    subAlternative.push(l33t, firstKey);
+                    nextSubs.push(sub);
+                    nextSubs.push(subAlternative);
+                }
+            });
+        });
+        nextSubs = this.deduplicate(nextSubs);
+        return this.enumerateL33tSubsHelper(keys, nextSubs);
+    };
+    /** Returns the list of possible 1337 replacement dictionaries for a given password */
+    L33tMatcher.prototype.enumerateL33tSubs = function (table) {
+        var keys = (function () {
+            var results = new Array();
+            for (var key in table)
+                results.push(key);
+            return results;
+        })();
+        var subs = this.enumerateL33tSubsHelper(keys, [[]]);
+        return subs.map(function (sub) {
+            return sub.reduce(function (container, value) {
+                container[value[0]] = value[1];
+                return container;
+            }, {});
+        });
+    };
+    L33tMatcher.prototype.match = function (password) {
+        var _this = this;
+        var matches = new Array();
+        var relevantL33tSubtable = this.relevantL33tSubtable(password);
+        var subs = this.enumerateL33tSubs(relevantL33tSubtable);
+        var matchedTokens = {};
+        subs.forEach(function (sub) {
+            var anySub = false;
+            for (var key in sub) {
+                anySub = true;
+                break;
+            }
+            if (!anySub)
+                return;
+            var subbedPassword = password.split("").map(function (chr) { return sub[chr] || chr; }).join("");
+            _this.dictionaryMatcher.match(subbedPassword).forEach(function (match) {
+                var token = password.slice(match.i, match.j + 1);
+                // filter single-character l33t matches to reduce noise.
+                // otherwise '1' matches 'i', '4' matches 'a', both very common English words
+                // with low dictionary rank.
+                if (token.length <= 1)
+                    return;
+                var lowerToken = token.toLowerCase();
+                // only return the matches that contain an actual substitution
+                if (lowerToken === match.matchedWord)
+                    return;
+                // only return each token once
+                if (matchedTokens[lowerToken])
+                    return;
+                matchedTokens[lowerToken] = true;
+                // subset of mappings in sub that are in use for this match
+                var matchedSub = {};
+                for (var key in sub) {
+                    var chr = sub[key];
+                    if (token.indexOf(key) !== -1) {
+                        matchedSub[key] = chr;
+                    }
+                }
+                var subDisplay = (function () {
+                    var results = new Array();
+                    for (var key in matchedSub)
+                        results.push(key + " -> " + matchedSub[key]);
+                    return results;
+                })().join(", ");
+                matches.push({
+                    pattern: match.pattern,
+                    i: match.i,
+                    j: match.j,
+                    matchedWord: match.matchedWord,
+                    rank: match.rank,
+                    dictionaryName: match.dictionaryName,
+                    reversed: match.reversed,
+                    token: token,
+                    l33t: true,
+                    sub: matchedSub,
+                    subDisplay: subDisplay
+                });
+            });
+        });
+        return helpers_1.Helpers.sortMatches(matches);
+    };
+    return L33tMatcher;
+}());
+exports.L33tMatcher = L33tMatcher;
+
+
+/***/ }),
+/* 9 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var helpers_1 = __webpack_require__(1);
+var REGEXEN = {
+    recentYear: constants_1.REGEX_RECENT_YEAR
+};
+/**
+ * Regex matching
+ */
+var RegexMatcher = (function () {
+    function RegexMatcher() {
+    }
+    RegexMatcher.prototype.match = function (password) {
+        var matches = new Array();
+        for (var name_1 in REGEXEN) {
+            var regexp = REGEXEN[name_1];
+            // Keeps regex_match stateless
+            regexp.lastIndex = 0;
+            var regexpMatch = void 0;
+            while (regexpMatch = regexp.exec(password)) {
+                var token = regexpMatch[0];
+                matches.push({
+                    pattern: "regex",
+                    token: token,
+                    i: regexpMatch.index,
+                    j: regexpMatch.index + token.length - 1,
+                    regexName: name_1,
+                    regexpMatch: regexpMatch
+                });
+            }
+        }
+        return helpers_1.Helpers.sortMatches(matches);
+    };
+    return RegexMatcher;
+}());
+exports.RegexMatcher = RegexMatcher;
+
+
+/***/ }),
+/* 10 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var scoring_1 = __webpack_require__(3);
+/**
+ * Matches repeats (aaa, abcabcabc) and sequences (abcdef)
+ */
+var RepeatMatcher = (function () {
+    function RepeatMatcher(matching) {
+        this.matching = matching;
+    }
+    RepeatMatcher.prototype.match = function (password) {
+        var matches = new Array();
+        var greedy = /(.+)\1+/g;
+        var lazy = /(.+?)\1+/g;
+        var lazyAnchored = /^(.+?)\1+$/;
+        var lastIndex = 0;
+        var match;
+        var baseToken;
+        while (lastIndex < password.length) {
+            greedy.lastIndex = lastIndex;
+            lazy.lastIndex = lastIndex;
+            var greedyMatch = greedy.exec(password);
+            if (!greedyMatch)
+                break;
+            var lazyMatch = lazy.exec(password);
+            if (greedyMatch[0].length > lazyMatch[0].length) {
+                // greedy beats lazy for 'aabaab'
+                //   greedy: [aabaab, aab]
+                //   lazy:   [aa,     a]
+                match = greedyMatch;
+                // greedy's repeated string might itself be repeated, eg.
+                // aabaab in aabaabaabaab.
+                // run an anchored lazy match on greedy's repeated string
+                // to find the shortest repeated string
+                baseToken = lazyAnchored.exec(match[0])[1];
+            }
+            else {
+                // lazy beats greedy for 'aaaaa'
+                //   greedy: [aaaa,  aa]
+                //   lazy:   [aaaaa, a]
+                match = lazyMatch;
+                baseToken = match[1];
+            }
+            var _a = {
+                i: match.index,
+                j: match.index + match[0].length - 1
+            }, i = _a.i, j = _a.j;
+            var baseAnalysis = scoring_1.Scoring.mostGuessableMatchSequence(baseToken, this.matching.omnimatch(baseToken));
+            matches.push({
+                pattern: "repeat",
+                i: i,
+                j: j,
+                token: match[0],
+                baseToken: baseToken,
+                baseGuesses: baseAnalysis.guesses,
+                baseMatches: baseAnalysis.sequence,
+                repeatCount: match[0].length / baseToken.length
+            });
+            lastIndex = j + 1;
+        }
+        return matches;
+    };
+    return RepeatMatcher;
+}());
+exports.RepeatMatcher = RepeatMatcher;
+
+
+/***/ }),
+/* 11 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var dictionary_1 = __webpack_require__(5);
+var helpers_1 = __webpack_require__(1);
+/**
+ * Dictionary match, reversed (common passwords, english, last names, etc)
+ */
+var ReverseDictionaryMatcher = (function (_super) {
+    __extends(ReverseDictionaryMatcher, _super);
+    function ReverseDictionaryMatcher(rankedDictionaries) {
+        return _super.call(this, rankedDictionaries) || this;
+    }
+    ReverseDictionaryMatcher.prototype.match = function (password) {
+        var reversed_password = password.split("").reverse().join("");
+        var matches = _super.prototype.match.call(this, reversed_password);
+        var ref;
+        matches.forEach(function (match) {
+            // Map coordinates back to original string
+            ref = {
+                i: password.length - 1 - match.j,
+                j: password.length - 1 - match.i
+            };
+            match.i = ref.i;
+            match.j = ref.j;
+            // Reverse back
+            match.token = match.token.split("").reverse().join("");
+            match.reversed = true;
+        });
+        return helpers_1.Helpers.sortMatches(matches);
+    };
+    return ReverseDictionaryMatcher;
+}(dictionary_1.DictionaryMatcher));
+exports.ReverseDictionaryMatcher = ReverseDictionaryMatcher;
+
+
+/***/ }),
+/* 12 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+/**
+ * Identifies sequences by looking for repeated differences in unicode codepoint
+ * @summary this allows skipping, such as 9753, and also matches some extended unicode sequences
+ * such as Greek and Cyrillic alphabets.
+ *
+ * for example, consider the input 'abcdb975zy'
+ *
+ * password: a   b   c   d   b    9   7   5   z   y
+ * index:    0   1   2   3   4    5   6   7   8   9
+ * delta:      1   1   1  -2  -41  -2  -2  69   1
+ *
+ * expected result:
+ * [(i, j, delta), ...] = [(0, 3, 1), (5, 7, -2), (8, 9, 1)]
+ */
+var SequenceMatcher = (function () {
+    function SequenceMatcher() {
+    }
+    SequenceMatcher.prototype.update = function (matches, password, i, j, delta) {
+        var abs = Math.abs(delta);
+        if (!(j - i > 1 || abs === 1))
+            return;
+        if (abs < 0 || abs > constants_1.MAX_DELTA)
+            return;
+        var token = password.slice(i, j + 1);
+        var sequenceName;
+        var sequenceSpace;
+        if (constants_1.REGEX_SEQUENCE_LOWER.test(token)) {
+            sequenceName = "lower";
+            sequenceSpace = 26;
+        }
+        else if (constants_1.REGEX_SEQUENCE_UPPER.test(token)) {
+            sequenceName = "upper";
+            sequenceSpace = 26;
+        }
+        else if (constants_1.REGEX_SEQUENCE_DIGIT.test(token)) {
+            sequenceName = "digits";
+            sequenceSpace = 10;
+        }
+        else {
+            // conservatively stick with roman alphabet size.
+            sequenceName = "unicode";
+            sequenceSpace = 26;
+        }
+        matches.push({
+            pattern: "sequence",
+            i: i,
+            j: j,
+            token: token,
+            sequenceName: sequenceName,
+            sequenceSpace: sequenceSpace,
+            ascending: delta > 0
+        });
+    };
+    SequenceMatcher.prototype.match = function (password) {
+        var matches = new Array();
+        if (password.length <= 1)
+            return matches;
+        var lastDelta;
+        var i = 0;
+        var j = 0;
+        for (var k = 1; k <= password.length; k++) {
+            var delta = password.charCodeAt(k) - password.charCodeAt(k - 1);
+            if (!lastDelta)
+                lastDelta = delta;
+            if (lastDelta === delta)
+                continue;
+            j = k - 1;
+            this.update(matches, password, i, j, lastDelta);
+            i = j;
+            lastDelta = delta;
+        }
+        this.update(matches, password, i, password.length - 1, lastDelta);
+        return matches;
+    };
+    return SequenceMatcher;
+}());
+exports.SequenceMatcher = SequenceMatcher;
+
+
+/***/ }),
+/* 13 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var lists_1 = __webpack_require__(2);
+var helpers_1 = __webpack_require__(1);
+/**
+ * Spatial match (qwerty/dvorak/keypad)
+ */
+var SpatialMatcher = (function () {
+    function SpatialMatcher() {
+    }
+    SpatialMatcher.prototype.matchHelper = function (password, graphName, graph) {
+        var matches = new Array();
+        var i = 0;
+        var _loop_1 = function () {
+            var j = i + 1;
+            var lastDirection;
+            var turns = 0;
+            var shiftedCount = 0;
+            // Check if initial character is shifted
+            if ((graphName === "qwerty" || graphName === "dvorak") && constants_1.REGEX_SHIFTED.test(password.charAt(i)))
+                shiftedCount = 1;
+            var found = true;
+            var _loop_2 = function () {
+                found = false;
+                var prevChar = password.charAt(j - 1);
+                var adjecents = graph[prevChar] || [];
+                var foundDirection = -1;
+                var curDirection = -1;
+                // consider growing pattern by one character if j hasn't gone over the edge.
+                if (j < password.length) {
+                    var curChar_1 = password.charAt(j);
+                    found = adjecents.some(function (adjecent) {
+                        curDirection++;
+                        if (adjecent && adjecent.indexOf(curChar_1) !== -1) {
+                            foundDirection = curDirection;
+                            // index 1 in the adjacency means the key is shifted,
+                            // 0 means unshifted: A vs a, % vs 5, etc.
+                            // for example, 'q' is adjacent to the entry '2@'.
+                            // @ is shifted w/ index 1, 2 is unshifted.
+                            if (adjecent.indexOf(curChar_1) === 1)
+                                shiftedCount++;
+                            if (lastDirection !== foundDirection) {
+                                // adding a turn is correct even in the initial case when last_direction is null:
+                                // every spatial pattern starts with a turn.
+                                turns++;
+                                lastDirection = foundDirection;
+                            }
+                            // break;
+                            return true;
+                        }
+                        // continue
+                        return false;
+                    });
+                }
+                // if the current pattern continued, extend j and try to grow again
+                if (found) {
+                    j++;
+                    // otherwise push the pattern discovered so far, if any...
+                }
+                else {
+                    // don't consider length 1 or 2 chains
+                    if (j - i > 2) {
+                        matches.push({
+                            pattern: "spatial",
+                            i: i,
+                            j: j - 1,
+                            token: password.slice(i, j),
+                            graph: graphName,
+                            turns: turns,
+                            shiftedCount: shiftedCount
+                        });
+                    }
+                    i = j;
+                }
+            };
+            while (found) {
+                _loop_2();
+            }
+        };
+        while (i < password.length - 1) {
+            _loop_1();
+        }
+        return matches;
+    };
+    SpatialMatcher.prototype.match = function (password) {
+        var matches = new Array();
+        for (var name_1 in lists_1.ADJACENCY_GRAPHS) {
+            var graph = lists_1.ADJACENCY_GRAPHS[name_1];
+            this.matchHelper(password, name_1, graph).forEach(function (match) { return matches.push(match); });
+        }
+        return helpers_1.Helpers.sortMatches(matches);
+    };
+    return SpatialMatcher;
+}());
+exports.SpatialMatcher = SpatialMatcher;
+
+
+/***/ }),
+/* 14 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var BruteforceCalculator = (function () {
+    function BruteforceCalculator() {
+    }
+    BruteforceCalculator.prototype.estimate = function (match) {
+        var guesses = Math.pow(constants_1.BRUTEFORCE_CARDINALITY, match.token.length);
+        if (guesses === Number.POSITIVE_INFINITY)
+            guesses = Number.MAX_VALUE;
+        // small detail: make bruteforce matches at minimum one guess bigger than smallest allowed
+        // submatch guesses, such that non-bruteforce submatches over the same [i..j] take precedence.
+        var minGuesses = (match.token.length == 1 ? constants_1.MIN_SUBMATCH_GUESSES_SINGLE_CHAR : constants_1.MIN_SUBMATCH_GUESSES_MULTI_CHAR) + 1;
+        return Math.max(guesses, minGuesses);
+    };
+    return BruteforceCalculator;
+}());
+exports.BruteforceCalculator = BruteforceCalculator;
+
+
+/***/ }),
+/* 15 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var RepeatCalculator = (function () {
+    function RepeatCalculator() {
+    }
+    RepeatCalculator.prototype.estimate = function (match) {
+        return match.baseGuesses * match.repeatCount;
+    };
+    return RepeatCalculator;
+}());
+exports.RepeatCalculator = RepeatCalculator;
+
+
+/***/ }),
+/* 16 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var SequenceCalculator = (function () {
+    function SequenceCalculator() {
+    }
+    SequenceCalculator.prototype.estimate = function (match) {
+        var firstChr = match.token.charAt(0);
+        var basesGuesses = 0;
+        // lower guesses for obvious starting points
+        if (constants_1.REGEX_START.test(firstChr))
+            basesGuesses = 4;
+        else if (constants_1.REGEX_DIGIT.test(firstChr))
+            basesGuesses = 10;
+        else
+            basesGuesses = 26;
+        // need to try a descending sequence in addition to every ascending sequence ->
+        // 2x guesses
+        if (!match.ascending)
+            basesGuesses *= 2;
+        return basesGuesses * match.token.length;
+    };
+    return SequenceCalculator;
+}());
+exports.SequenceCalculator = SequenceCalculator;
 
 
 /***/ })

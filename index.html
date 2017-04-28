@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>zxcvbn-typescript</title>
+</head>
+
+<body>
+  <input type="text" onkeyup="onChange(this.value)" />
+
+  <script src="/dist/zxcvbn-typescript.js"></script>
+  <script>
+    function onChange(password) {
+      console.log(Zxcvbn.check(password));
+    }
+  </script>
+</body>
+
+</html>
