@@ -105,6 +105,7 @@ Object.assign(webpack_external, webpack_settings);
 Object.assign(webpack_debug, webpack_settings);
 
 module.exports = {
+  filename: filename,
   webpack_release: webpack_release,
   webpack_develop: webpack_develop,
   webpack_external: webpack_external,

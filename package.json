@@ -2,7 +2,8 @@
   "name": "zxcvbn-typescript",
   "version": "1.0.0",
   "description": "TypeScript version of zxcvbn",
-  "main": "src/index.ts",
+  "main": "./dist/zxcvbn-typescript.js",
+  "types": "./dist/zxcvbn-typescript.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/NckHmml/zxcvbn-typescript"
@@ -20,8 +21,11 @@
     "awesome-typescript-loader": "^3.1.2",
     "browser-sync": "^2.18.8",
     "browser-sync-webpack-plugin": "^1.1.4",
+    "dts-bundle": "^0.7.2",
     "gulp": "^3.9.1",
+    "gulp-replace": "^0.5.4",
     "gulp-tslint": "^8.0.0",
+    "gulp-typescript": "^3.1.6",
     "ignore-loader": "^0.1.2",
     "tslint": "^5.1.0",
     "typescript": "^2.3.1",
