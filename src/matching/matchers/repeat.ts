@@ -65,10 +65,10 @@ export class RepeatMatcher implements IMatcher {
 
       matches.push({
         pattern: "repeat",
-        i,
-        j,
+        i: i,
+        j: j,
         token: match[0],
-        baseToken,
+        baseToken: baseToken,
         baseGuesses: baseAnalysis.guesses,
         baseMatches: baseAnalysis.sequence,
         repeatCount: match[0].length / baseToken.length

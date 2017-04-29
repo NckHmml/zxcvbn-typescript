@@ -30,11 +30,11 @@ export class RegexMatcher implements IMatcher {
         const token = regexpMatch[0];
         matches.push({
           pattern: "regex",
-          token,
+          token: token,
           i: regexpMatch.index,
           j: regexpMatch.index + token.length - 1,
           regexName: name,
-          regexpMatch
+          regexpMatch: regexpMatch
         });
       }
     }

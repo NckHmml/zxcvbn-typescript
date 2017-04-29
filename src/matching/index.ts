@@ -4,6 +4,7 @@ import { Helpers } from "../helpers";
 import { Zxcvbn } from "../";
 
 import { IMatch, IMatcher, IRankedDictionaries } from "./interfaces";
+import { DateMatcher } from "./matchers/date";
 import { DictionaryMatcher } from "./matchers/dictionary";
 import { ReverseDictionaryMatcher } from "./matchers/reverseDictionary";
 import { L33tMatcher } from "./matchers/l33t";
@@ -57,6 +58,7 @@ export class Matching {
     const dictionaryMatcher = new DictionaryMatcher(this.RankedDictionaries);
 
     const matchers: Array<IMatcher> = [
+      new DateMatcher(),
       dictionaryMatcher,
       new ReverseDictionaryMatcher(this.RankedDictionaries),
       new L33tMatcher(this.RankedDictionaries, dictionaryMatcher),

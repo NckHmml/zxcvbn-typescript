@@ -48,11 +48,11 @@ export class SequenceMatcher implements IMatcher {
 
     matches.push({
       pattern: "sequence",
-      i,
-      j,
-      token,
-      sequenceName,
-      sequenceSpace,
+      i: i,
+      j: j,
+      token: token,
+      sequenceName: sequenceName,
+      sequenceSpace: sequenceSpace,
       ascending: delta > 0
     });
   }

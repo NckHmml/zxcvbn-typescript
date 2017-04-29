@@ -84,11 +84,16 @@ return /******/ (function(modules) { // webpackBootstrap
 
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BRUTEFORCE_CARDINALITY = 10;
+exports.DATE_MAX_YEAR = 2050;
+exports.DATE_MIN_YEAR = 1000;
 exports.MIN_GUESSES_BEFORE_GROWING_SEQUENCE = 10000;
 exports.MIN_SUBMATCH_GUESSES_SINGLE_CHAR = 10;
 exports.MIN_SUBMATCH_GUESSES_MULTI_CHAR = 50;
 exports.MAX_DELTA = 5;
+exports.REFERENCE_YEAR = new Date().getFullYear();
 exports.REGEX_RECENT_YEAR = /19\d\d|200\d|201\d/g;
+exports.REGEX_DATE_NO_SEPARATOR = /^\d{4,8}$/;
+exports.REGEX_DATE_WITH_SEPARATOR = /^(\d{1,4})([\s\/\\_.-])(\d{1,2})\2(\d{1,4})$/;
 exports.REGEX_START = /[az019]/i;
 exports.REGEX_DIGIT = /\d/;
 exports.REGEX_SHIFTED = /[~!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL: "ZXCVBNM<>?]/;
@@ -389,9 +394,9 @@ exports.DATE_SPLITS = {
 
 Object.defineProperty(exports, "__esModule", { value: true });
 var constants_1 = __webpack_require__(0);
-var bruteforce_1 = __webpack_require__(14);
-var repeat_1 = __webpack_require__(15);
-var sequence_1 = __webpack_require__(16);
+var bruteforce_1 = __webpack_require__(15);
+var repeat_1 = __webpack_require__(16);
+var sequence_1 = __webpack_require__(17);
 var Scoring = (function () {
     function Scoring() {
     }
@@ -646,13 +651,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var lists_1 = __webpack_require__(2);
 var helpers_1 = __webpack_require__(1);
 var _1 = __webpack_require__(4);
+var date_1 = __webpack_require__(8);
 var dictionary_1 = __webpack_require__(5);
-var reverseDictionary_1 = __webpack_require__(11);
-var l33t_1 = __webpack_require__(8);
-var regex_1 = __webpack_require__(9);
-var repeat_1 = __webpack_require__(10);
-var sequence_1 = __webpack_require__(12);
-var spatial_1 = __webpack_require__(13);
+var reverseDictionary_1 = __webpack_require__(12);
+var l33t_1 = __webpack_require__(9);
+var regex_1 = __webpack_require__(10);
+var repeat_1 = __webpack_require__(11);
+var sequence_1 = __webpack_require__(13);
+var spatial_1 = __webpack_require__(14);
 var Matching = (function () {
     function Matching(frequencyList) {
         if (frequencyList === void 0) { frequencyList = lists_1.FREQUENCY_LIST; }
@@ -692,6 +698,7 @@ var Matching = (function () {
     Matching.prototype.omnimatch = function (password) {
         var dictionaryMatcher = new dictionary_1.DictionaryMatcher(this.RankedDictionaries);
         var matchers = [
+            new date_1.DateMatcher(),
             dictionaryMatcher,
             new reverseDictionary_1.ReverseDictionaryMatcher(this.RankedDictionaries),
             new l33t_1.L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
@@ -713,6 +720,250 @@ exports.Matching = Matching;
 
 /***/ }),
 /* 8 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var lists_1 = __webpack_require__(2);
+var helpers_1 = __webpack_require__(1);
+/**
+ * Date matching
+ * @summary
+ *   a "date" is recognized as:
+ *   any 3-tuple that starts or ends with a 2- or 4-digit year,
+ *   with 2 or 0 separator chars (1.1.91 or 1191),
+ *   maybe zero-padded (01-01-91 vs 1-1-91),
+ *   a month between 1 and 12,
+ *   a day between 1 and 31.
+ *
+ * note: this isn't true date parsing in that "feb 31st" is allowed,
+ * this doesn't check for leap years, etc.
+ *
+ * recipe:
+ * start with regex to find maybe-dates, then attempt to map the integers
+ * onto month-day-year to filter the maybe-dates into dates.
+ * finally, remove matches that are substrings of other matches to reduce noise.
+ *
+ * note: instead of using a lazy or greedy regex to find many dates over the full string,
+ * this uses a ^...$ regex against every substring of the password -- less performant but leads
+ * to every possible date match.
+ */
+var DateMatcher = (function () {
+    function DateMatcher() {
+    }
+    /**
+     * Converts a 3-tuple to day, month, year
+     */
+    DateMatcher.prototype.mapIntsToDMY = function (ints) {
+        var _this = this;
+        /* given a 3-tuple, discard if:
+         *   middle int is over 31 (for all dmy formats, years are never allowed in the middle)
+         *   middle int is zero
+         *   any int is over the max allowable year
+         *   any int is over two digits but under the min allowable year
+         *   2 ints are over 31, the max allowable day
+         *   2 ints are zero
+         *   all ints are over 12, the max allowable month
+         */
+        if (ints[1] > 31 || ints[1] <= 0)
+            return;
+        var over12 = 0;
+        var over31 = 0;
+        var under1 = 0;
+        var invalids = ints.some(function (int) {
+            if (int > constants_1.DATE_MAX_YEAR || (int >= 99 && int < constants_1.DATE_MIN_YEAR))
+                return true;
+            if (int > 31)
+                over31++;
+            if (int > 12)
+                over12++;
+            if (int <= 0)
+                under1++;
+            if (over31 == 2 || over12 == 3 || under1 == 2)
+                return true;
+        });
+        if (invalids)
+            return;
+        var years = [ints[0], ints[2]];
+        var rests = [ints.slice(1, 3), ints.slice(0, 2)];
+        // first look for a four digit year: yyyy + daymonth or daymonth + yyyy
+        var validYears = years
+            .map(function (year, index) {
+            return {
+                valid: year <= constants_1.DATE_MAX_YEAR && year >= constants_1.DATE_MIN_YEAR,
+                index: index
+            };
+        })
+            .filter(function (item) { return item.valid; })
+            .map(function (item) { return item.index; });
+        if (validYears.length > 0) {
+            var index = validYears[0];
+            var year = years[index];
+            var dm = this.mapIntsToDM(rests[index]);
+            if (dm) {
+                return {
+                    year: year,
+                    month: dm.month,
+                    day: dm.day
+                };
+            }
+            else {
+                // for a candidate that includes a four-digit year,
+                // when the remaining ints don't match to a day and month,
+                // it is not a date.
+                return;
+            }
+        }
+        // given no four-digit year, two digit years are the most flexible int to match, so
+        // try to parse a day-month out of ints[0..1] or ints[1..0]
+        var validDMs = rests
+            .map(function (pair, index) {
+            return {
+                dm: _this.mapIntsToDM(pair),
+                year: years[index]
+            };
+        })
+            .filter(function (item) { return item.dm; })
+            .map(function (item) {
+            var _a = item.dm, month = _a.month, day = _a.day;
+            return {
+                year: _this.twoToFourDigitYear(item.year),
+                month: month,
+                day: day
+            };
+        });
+        if (validDMs.length > 0)
+            return validDMs[0];
+    };
+    DateMatcher.prototype.twoToFourDigitYear = function (year) {
+        if (year > 99)
+            return year;
+        if (year > 50)
+            // 87 -> 1987
+            return year + 1900;
+        // 15 -> 2015
+        return year + 2000;
+    };
+    DateMatcher.prototype.mapIntsToDM = function (ints) {
+        var d = ints[0];
+        var m = ints[1];
+        if (d >= 1 && d <= 31 && m >= 1 && m <= 12)
+            return {
+                day: d,
+                month: m
+            };
+        // Reverse
+        d = ints[1];
+        m = ints[0];
+        if (d >= 1 && d <= 31 && m >= 1 && m <= 12)
+            return {
+                day: d,
+                month: m
+            };
+    };
+    DateMatcher.prototype.match = function (password) {
+        var _this = this;
+        var matches = new Array();
+        // dates without separators are between length 4 '1191' and 8 '11111991'
+        for (var i = 0; i <= password.length - 4; i++) {
+            var _loop_1 = function (j) {
+                var token = password.slice(i, j + 1);
+                if (!constants_1.REGEX_DATE_NO_SEPARATOR.test(token))
+                    return "continue";
+                var candidates = new Array();
+                lists_1.DATE_SPLITS[token.length].forEach(function (pair) {
+                    var k = pair[0];
+                    var l = pair[1];
+                    var dmy = _this.mapIntsToDMY([
+                        parseInt(token.slice(0, k)),
+                        parseInt(token.slice(k, l)),
+                        parseInt(token.slice(l)),
+                    ]);
+                    if (dmy)
+                        candidates.push(dmy);
+                });
+                if (candidates.length === 0)
+                    return "continue";
+                // at this point: different possible dmy mappings for the same i,j substring.
+                // match the candidate date that likely takes the fewest guesses: a year closest to 2000.
+                // (scoring.REFERENCE_YEAR).
+                //
+                // ie, considering '111504', prefer 11-15-04 to 1-1-1504
+                // (interpreting '04' as 2004)
+                var metric = function (candidate) { return Math.abs(candidate.year - constants_1.REFERENCE_YEAR); };
+                var bestCandidate = candidates[0];
+                var minDistance = metric(bestCandidate);
+                candidates.forEach(function (candidate) {
+                    var distance = metric(candidate);
+                    if (distance < minDistance) {
+                        bestCandidate = candidate;
+                        minDistance = distance;
+                    }
+                });
+                matches.push({
+                    pattern: "date",
+                    token: token,
+                    i: i,
+                    j: j,
+                    separator: "",
+                    year: bestCandidate.year,
+                    month: bestCandidate.month,
+                    day: bestCandidate.day
+                });
+            };
+            for (var j = i + 3; j <= i + 7 && j < password.length; j++) {
+                _loop_1(j);
+            }
+        }
+        // dates with separators are between length 6 '1/1/91' and 10 '11/11/1991'
+        for (var i = 0; i <= password.length - 6; i++) {
+            for (var j = i + 5; j <= i + 9 && j < password.length; j++) {
+                var token = password.slice(i, j + 1);
+                var regexMatch = constants_1.REGEX_DATE_WITH_SEPARATOR.exec(token);
+                if (!regexMatch)
+                    continue;
+                var dmy = this.mapIntsToDMY([
+                    parseInt(regexMatch[1]),
+                    parseInt(regexMatch[3]),
+                    parseInt(regexMatch[4]),
+                ]);
+                if (!dmy)
+                    continue;
+                matches.push({
+                    pattern: "date",
+                    token: token,
+                    i: i,
+                    j: j,
+                    separator: regexMatch[2],
+                    year: dmy.year,
+                    month: dmy.month,
+                    day: dmy.day
+                });
+            }
+        }
+        // matches now contains all valid date strings in a way that is tricky to capture
+        // with regexes only. while thorough, it will contain some unintuitive noise:
+        //
+        // '2015_06_04', in addition to matching 2015_06_04, will also contain
+        // 5(!) other date matches: 15_06_04, 5_06_04, ..., even 2015 (matched as 5/1/2020)
+        //
+        // to reduce noise, remove date matches that are strict substrings of others
+        return helpers_1.Helpers.sortMatches(matches.filter(function (match) {
+            return !matches.some(function (otherMatch) {
+                if (match !== otherMatch)
+                    return otherMatch.i <= match.i && otherMatch.j >= match.j;
+            });
+        }));
+    };
+    return DateMatcher;
+}());
+exports.DateMatcher = DateMatcher;
+
+
+/***/ }),
+/* 9 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -873,7 +1124,7 @@ exports.L33tMatcher = L33tMatcher;
 
 
 /***/ }),
-/* 9 */
+/* 10 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -917,7 +1168,7 @@ exports.RegexMatcher = RegexMatcher;
 
 
 /***/ }),
-/* 10 */
+/* 11 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -989,7 +1240,7 @@ exports.RepeatMatcher = RepeatMatcher;
 
 
 /***/ }),
-/* 11 */
+/* 12 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -1039,7 +1290,7 @@ exports.ReverseDictionaryMatcher = ReverseDictionaryMatcher;
 
 
 /***/ }),
-/* 12 */
+/* 13 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -1126,7 +1377,7 @@ exports.SequenceMatcher = SequenceMatcher;
 
 
 /***/ }),
-/* 13 */
+/* 14 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -1229,7 +1480,7 @@ exports.SpatialMatcher = SpatialMatcher;
 
 
 /***/ }),
-/* 14 */
+/* 15 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -1254,7 +1505,7 @@ exports.BruteforceCalculator = BruteforceCalculator;
 
 
 /***/ }),
-/* 15 */
+/* 16 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -1272,7 +1523,7 @@ exports.RepeatCalculator = RepeatCalculator;
 
 
 /***/ }),
-/* 16 */
+/* 17 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";

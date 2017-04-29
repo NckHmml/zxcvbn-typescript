@@ -76,12 +76,12 @@ export class SpatialMatcher implements IMatcher {
           if (j - i > 2) {
             matches.push({
               pattern: "spatial",
-              i,
+              i: i,
               j: j - 1,
               token: password.slice(i, j),
               graph: graphName,
-              turns,
-              shiftedCount
+              turns: turns,
+              shiftedCount: shiftedCount
             });
           }
           i = j;

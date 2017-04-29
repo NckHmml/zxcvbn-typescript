@@ -174,7 +174,7 @@ export class L33tMatcher implements IMatcher {
           token: token,
           l33t: true,
           sub: matchedSub,
-          subDisplay
+          subDisplay: subDisplay
         });
       });
     });

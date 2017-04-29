@@ -246,7 +246,9 @@ export const L33T_TABLE: {
   x: ["%"],
   z: ["2"]
 };
-export const DATE_SPLITS = {
+export const DATE_SPLITS: {
+  [key: number]: Array<Array<number>>
+} = {
   4: [[1, 2], [2, 3]],
   5: [[1, 3], [2, 3]],
   6: [[1, 2], [2, 4], [4, 5]],
