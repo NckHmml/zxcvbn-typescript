@@ -47,8 +47,10 @@ declare module 'zxcvbn-typescript/matching' {
 declare module 'zxcvbn-typescript/scoring/interfaces' {
     import { IMatch } from "zxcvbn-typescript/matching/interfaces";
     export interface IScoringResult {
-        sequence: any;
+        password: string;
+        sequence: Array<IMatch>;
         guesses: number;
+        guessesLog10: number;
     }
     export interface ICalculator {
         estimate: (match: IMatch) => number;
@@ -57,7 +59,7 @@ declare module 'zxcvbn-typescript/scoring/interfaces' {
 
 declare module 'zxcvbn-typescript/matching/interfaces' {
     export interface IMatch {
-        pattern: "date" | "dictionary" | "regex" | "repeat" | "spatial" | "sequence";
+        pattern: "bruteforce" | "date" | "dictionary" | "regex" | "repeat" | "spatial" | "sequence";
         i: number;
         j: number;
         token: string;

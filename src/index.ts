@@ -37,7 +37,6 @@ export class Zxcvbn {
 
     // Get matches
     const matches = this.matching.omnimatch(password);
-    console.log(matches);
     // Get result
     const result = Scoring.mostGuessableMatchSequence(password, matches) as IResult;
 

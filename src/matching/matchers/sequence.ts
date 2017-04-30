@@ -66,7 +66,7 @@ export class SequenceMatcher implements IMatcher {
     let i = 0;
     let j = 0;
 
-    for (let k = 1; k <= password.length; k++) {
+    for (let k = 1; k < password.length; k++) {
       const delta = password.charCodeAt(k) - password.charCodeAt(k - 1);
       if (!lastDelta)
         lastDelta = delta;

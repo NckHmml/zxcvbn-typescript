@@ -1,49 +1,32 @@
-import { MIN_SUBMATCH_GUESSES_SINGLE_CHAR, MIN_SUBMATCH_GUESSES_MULTI_CHAR} from "~/constants";
+import { MIN_GUESSES_BEFORE_GROWING_SEQUENCE, MIN_SUBMATCH_GUESSES_SINGLE_CHAR, MIN_SUBMATCH_GUESSES_MULTI_CHAR } from "~/constants";
 import { IMatch } from "~/matching/interfaces";
+import { Helpers } from "~/helpers";
 import { IScoringResult, ICalculator } from "./interfaces";
 
 import { BruteforceCalculator } from "./calculators/bruteforce";
+import { DateCalculator } from "./calculators/date";
+import { DictionaryCalculator } from "./calculators/dictionary";
+import { RegexCalculator } from "./calculators/regex";
 import { RepeatCalculator } from "./calculators/repeat";
 import { SequenceCalculator } from "./calculators/sequence";
+import { SpatialCalculator } from "./calculators/spatial";
 
+interface IOptimal {
+  m: Array<{ [l: number]: IMatch }>;
+  pi: Array<{ [l: number]: number }>;
+  g: Array<{ [l: number]: number }>;
+}
 
 export class Scoring {
-
-  static estimationFunctions: { [key: string]: ICalculator } = {
+  private static estimationFunctions: { [key: string]: ICalculator } = {
     "bruteforce": new BruteforceCalculator(),
+    "dictionary": new DictionaryCalculator(),
+    "date": new DateCalculator(),
+    "regex": new RegexCalculator(),
     "repeat": new RepeatCalculator(),
-    "sequence": new SequenceCalculator()
-    // "bruteforce": this.bruteforceGuesses,
-    // "dictionary": this.dictionaryGuesses,
-    // "spatial": this.spatialGuesses,
-    // "repeat": this.repeatGuesses,
-    // "sequence": this.sequenceGuesses,
-    // "regex": this.regexGuesses,
-    // "date": this.dateGuesses
+    "sequence": new SequenceCalculator(),
+    "spatial": new SpatialCalculator()
   };
-
-  private static nCk = (n: number, k: number): number => {
-    // http://blog.plover.com/math/choose.html
-    if (k > n)
-      return 0;
-    if (k === 0)
-      return 1;
-
-    let r = 1;
-    for (let d = 1; d < k; d++) {
-      r *= n;
-      r /= d;
-      n -= 1;
-    }
-
-    return r;
-  }
-
-  private static log10 = (n: number): number =>
-    Math.log(n) / Math.log(10)
-
-  private static log2 = (n: number): number =>
-    Math.log(n) / Math.log(2)
 
   /** unoptimized, called only on small n */
   private static factorial = (n: number): number => {
@@ -51,7 +34,7 @@ export class Scoring {
       return 1;
 
     let f = 1;
-    for (let i = 2; i < n; i++)
+    for (let i = 2; i <= n; i++)
       f *= i;
     return f;
   }
@@ -67,21 +50,106 @@ export class Scoring {
       minGuesses = match.token.length == 1 ? MIN_SUBMATCH_GUESSES_SINGLE_CHAR : MIN_SUBMATCH_GUESSES_MULTI_CHAR;
 
     match.guesses = this.estimationFunctions[match.pattern].estimate(match);
-    match.guessesLog10 = Scoring.log10(match.guesses);
+    match.guessesLog10 = Helpers.log10(match.guesses);
 
     return match.guesses;
   }
 
-  private static spatialGuesses(match: IMatch): number {
-    return 0;
+  /**
+   * @summary considers whether a length-l sequence ending at match m is better (fewer guesses)
+   * than previously encountered sequences, updating state if so.
+   */
+  private static updateOptimal(password: string, optimal: IOptimal, match: IMatch, l: number, excludeAdditive: boolean) {
+    const k = match.j;
+    let pi = this.estimateGuesses(password, match);
+
+    if (l > 1)
+      // we're considering a length-l sequence ending with match m:
+      // obtain the product term in the minimization function by multiplying m's guesses
+      // by the product of the length-(l-1) sequence ending just before m, at m.i - 1.
+      pi *= optimal.pi[match.i - 1][l - 1];
+
+    // calculate the minimization func
+    let g = this.factorial(l) * pi;
+    if (!excludeAdditive)
+      g += Math.pow(MIN_GUESSES_BEFORE_GROWING_SEQUENCE, l - 1);
+
+    // update state if new best.
+    // first see if any competing sequences covering this prefix, with l or fewer matches,
+    // fare better than this sequence. if so, skip it and return.
+    for (const competingL in optimal.g[k]) {
+      if (parseInt(competingL) > l)
+        continue;
+
+      if (optimal.g[k][l] <= g)
+        return;
+    }
+
+    // this sequence might be part of the final optimal sequence.
+    optimal.g[k][l] = g;
+    optimal.m[k][l] = match;
+    optimal.pi[k][l] = pi;
   }
 
-  private static regexGuesses(match: IMatch): number {
-    return 0;
+  /**
+   * evaluate bruteforce matches ending at k.
+   */
+  private static bruteforceUpdate(password: string, optimal: IOptimal, k: number, excludeAdditive: boolean) {
+    // see if a single bruteforce match spanning the k-prefix is optimal.
+    let match = this.makeBruteforceMatch(password, 0, k);
+    this.updateOptimal(password, optimal, match, 1, excludeAdditive);
+    for (let i = 1; i <= k; i++) {
+      // generate k bruteforce matches, spanning from (i=1, j=k) up to (i=k, j=k).
+      // see if adding these new matches to any of the sequences in optimal[i-1]
+      // leads to new bests.
+      match = this.makeBruteforceMatch(password, i, k);
+      for (const l in optimal.m[i - 1]) {
+        const lastMatch = optimal.m[i - 1][l];
+        // corner: an optimal sequence will never have two adjacent bruteforce matches.
+        // it is strictly better to have a single bruteforce match spanning the same region:
+        // same contribution to the guess product with a lower length.
+        // --> safe to skip those cases.
+        if (lastMatch.pattern === "bruteforce")
+          continue;
+        this.updateOptimal(password, optimal, match, parseInt(l) + 1, excludeAdditive);
+      }
+    }
   }
 
-  private static dateGuesses(match: IMatch): number {
-    return 0;
+  /**
+   * make bruteforce match objects spanning i to j, inclusive.
+   */
+  private static makeBruteforceMatch(password: string, i: number, j: number): IMatch {
+    return {
+      pattern: "bruteforce",
+      token: password.slice(i, j + 1),
+      i: i,
+      j: j
+    };
+  }
+
+  private static unwind(optimal: IOptimal, n: number): Array<IMatch> {
+    const optimalMatchSequence = new Array<IMatch>();
+    let k = n - 1;
+    // find the final best sequence length and score
+    let l: number;
+    let g: number = Infinity;
+    for (const key in optimal.g[k]) {
+      const candidateL = parseInt(key);
+      const candidateG = optimal.g[k][candidateL];
+      if (candidateG >= g) continue;
+      l = candidateL;
+      g = candidateG;
+    }
+
+    while (k >= 0) {
+      const match = optimal.m[k][l];
+      optimalMatchSequence.unshift(match);
+      k = match.i - 1;
+      l--;
+    }
+
+    return optimalMatchSequence;
   }
 
   /**
@@ -115,36 +183,52 @@ export class Scoring {
    */
   public static mostGuessableMatchSequence(password: string, matches: Array<IMatch>, excludeAdditive = false): IScoringResult {
     const n = password.length;
+    const baseArray = Array.apply({}, new Array(n));
 
     // partition matches into sublists according to ending index j
-    const matchesByJ: [Array<IMatch>] = Array.apply({}, new Array(n)).map(i => []);
+    const matchesByJ: [Array<IMatch>] = baseArray.map(i => []);
     matches.forEach(match => matchesByJ[match.j].push(match));
     // small detail: for deterministic output, sort each sublist by i.
     matchesByJ.forEach(list => list.sort((m1, m2) => m1.i - m2.i));
 
-    const optimal = {
+    const optimal: IOptimal = {
       // optimal.m[k][l] holds final match in the best length-l match sequence covering the
       // password prefix up to k, inclusive.
       // if there is no length-l sequence that scores better (fewer guesses) than
       // a shorter match sequence spanning the same prefix, optimal.m[k][l] is undefined.
-      m: Array.apply({}, new Array(n)),
+      m: baseArray.map(i => []),
       // same structure as optimal.m -- holds the product term Prod(m.guesses for m in sequence).
       // optimal.pi allows for fast (non-looping) updates to the minimization function.
-      pi: Array.apply({}, new Array(n)),
+      pi: baseArray.map(i => []),
       // same structure as optimal.m -- holds the overall metric.
-      g: Array.apply({}, new Array(n))
+      g: baseArray.map(i => [])
     };
 
-    // helper: considers whether a length-l sequence ending at match m is better (fewer guesses)
-    // than previously encountered sequences, updating state if so.
-    const update = (match: IMatch, l) => {
-      let k = match.j;
-      let pi = this.estimateGuesses(password, match);
-    };
+    for (let k = 0; k < n; k++) {
+      matchesByJ[k].forEach(match => {
+        if (match.i > 0) {
+          for (const l in optimal.m[match.i - 1])
+            this.updateOptimal(password, optimal, match, parseInt(l) + 1, excludeAdditive);
+        } else {
+          this.updateOptimal(password, optimal, match, 1, excludeAdditive);
+        }
+      });
+      this.bruteforceUpdate(password, optimal, k, excludeAdditive);
+    }
+
+    const optimalMatchSequence = this.unwind(optimal, n);
+    const optimalL = optimalMatchSequence.length;
+
+    let guesses = 1;
+    // corner: empty password
+    if (password.length > 0)
+      guesses = optimal.g[n - 1][optimalL];
 
     return {
-      sequence: undefined,
-      guesses: 0
+      password: password,
+      sequence: optimalMatchSequence,
+      guesses: guesses,
+      guessesLog10: Helpers.log10(guesses)
     };
   }
 }

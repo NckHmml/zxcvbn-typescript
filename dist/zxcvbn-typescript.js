@@ -83,6 +83,8 @@ return /******/ (function(modules) { // webpackBootstrap
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
+var lists_1 = __webpack_require__(2);
+var helpers_1 = __webpack_require__(1);
 exports.BRUTEFORCE_CARDINALITY = 10;
 exports.DATE_MAX_YEAR = 2050;
 exports.DATE_MIN_YEAR = 1000;
@@ -91,6 +93,7 @@ exports.MIN_SUBMATCH_GUESSES_SINGLE_CHAR = 10;
 exports.MIN_SUBMATCH_GUESSES_MULTI_CHAR = 50;
 exports.MAX_DELTA = 5;
 exports.REFERENCE_YEAR = new Date().getFullYear();
+exports.MIN_YEAR_SPACE = 20;
 exports.REGEX_RECENT_YEAR = /19\d\d|200\d|201\d/g;
 exports.REGEX_DATE_NO_SEPARATOR = /^\d{4,8}$/;
 exports.REGEX_DATE_WITH_SEPARATOR = /^(\d{1,4})([\s\/\\_.-])(\d{1,2})\2(\d{1,4})$/;
@@ -100,6 +103,14 @@ exports.REGEX_SHIFTED = /[~!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL: "ZXCVBNM<>?]/;
 exports.REGEX_SEQUENCE_LOWER = /^[a-z]+$/;
 exports.REGEX_SEQUENCE_UPPER = /^[A-Z]+$/;
 exports.REGEX_SEQUENCE_DIGIT = /^\d+$/;
+exports.REGEX_START_UPPER = /^[A-Z][^A-Z]+$/;
+exports.REGEX_END_UPPER = /^[^A-Z]+[A-Z]$/;
+exports.REGEX_ALL_UPPER = /^[^a-z]+$/;
+exports.REGEX_ALL_LOWER = /^[^A-Z]+$/;
+exports.KEYBOARD_AVERAGE_DEGREE = helpers_1.Helpers.calcAvarageDegree(lists_1.ADJACENCY_GRAPHS.qwerty);
+exports.KEYPAD_AVERAGE_DEGREE = helpers_1.Helpers.calcAvarageDegree(lists_1.ADJACENCY_GRAPHS.keypad); // slightly different for keypad/mac keypad, but close enough
+exports.KEYBOARD_STARTING_POSITIONS = helpers_1.Helpers.countKeys(lists_1.ADJACENCY_GRAPHS.qwerty);
+exports.KEYPAD_STARTING_POSITIONS = helpers_1.Helpers.countKeys(lists_1.ADJACENCY_GRAPHS.keypad);
 
 
 /***/ }),
@@ -120,6 +131,49 @@ var Helpers = (function () {
         return matches.sort(function (m1, m2) {
             return (m1.i - m2.i) || (m1.j - m2.j);
         });
+    };
+    /**
+     * Calculate log10
+     * @param n number to calculate log10 for
+     */
+    Helpers.log10 = function (n) {
+        return Math.log(n) / Math.log(10);
+    };
+    /**
+     * Counts the keys in a dictionary
+     * @param dictionary dictionary to count keys for
+     */
+    Helpers.countKeys = function (dictionary) {
+        return (function () {
+            var result = 0;
+            for (var key in dictionary)
+                result++;
+            return result;
+        })();
+    };
+    Helpers.calcAvarageDegree = function (map) {
+        var avarage = 0;
+        var keys = 0;
+        for (var key in map) {
+            avarage += map[key].filter(function (item) { return Boolean(item); }).length;
+            keys++;
+        }
+        avarage /= keys;
+        return avarage;
+    };
+    Helpers.nCk = function (n, k) {
+        // http://blog.plover.com/math/choose.html
+        if (k > n)
+            return 0;
+        if (k === 0)
+            return 1;
+        var r = 1;
+        for (var d = 1; d <= k; d++) {
+            r *= n;
+            r /= d;
+            n -= 1;
+        }
+        return r;
     };
     return Helpers;
 }());
@@ -394,9 +448,14 @@ exports.DATE_SPLITS = {
 
 Object.defineProperty(exports, "__esModule", { value: true });
 var constants_1 = __webpack_require__(0);
+var helpers_1 = __webpack_require__(1);
 var bruteforce_1 = __webpack_require__(15);
-var repeat_1 = __webpack_require__(16);
-var sequence_1 = __webpack_require__(17);
+var date_1 = __webpack_require__(16);
+var dictionary_1 = __webpack_require__(17);
+var regex_1 = __webpack_require__(18);
+var repeat_1 = __webpack_require__(19);
+var sequence_1 = __webpack_require__(20);
+var spatial_1 = __webpack_require__(21);
 var Scoring = (function () {
     function Scoring() {
     }
@@ -409,17 +468,95 @@ var Scoring = (function () {
         if (match.token.length < password.length)
             minGuesses = match.token.length == 1 ? constants_1.MIN_SUBMATCH_GUESSES_SINGLE_CHAR : constants_1.MIN_SUBMATCH_GUESSES_MULTI_CHAR;
         match.guesses = this.estimationFunctions[match.pattern].estimate(match);
-        match.guessesLog10 = Scoring.log10(match.guesses);
+        match.guessesLog10 = helpers_1.Helpers.log10(match.guesses);
         return match.guesses;
     };
-    Scoring.spatialGuesses = function (match) {
-        return 0;
+    /**
+     * @summary considers whether a length-l sequence ending at match m is better (fewer guesses)
+     * than previously encountered sequences, updating state if so.
+     */
+    Scoring.updateOptimal = function (password, optimal, match, l, excludeAdditive) {
+        var k = match.j;
+        var pi = this.estimateGuesses(password, match);
+        if (l > 1)
+            // we're considering a length-l sequence ending with match m:
+            // obtain the product term in the minimization function by multiplying m's guesses
+            // by the product of the length-(l-1) sequence ending just before m, at m.i - 1.
+            pi *= optimal.pi[match.i - 1][l - 1];
+        // calculate the minimization func
+        var g = this.factorial(l) * pi;
+        if (!excludeAdditive)
+            g += Math.pow(constants_1.MIN_GUESSES_BEFORE_GROWING_SEQUENCE, l - 1);
+        // update state if new best.
+        // first see if any competing sequences covering this prefix, with l or fewer matches,
+        // fare better than this sequence. if so, skip it and return.
+        for (var competingL in optimal.g[k]) {
+            if (parseInt(competingL) > l)
+                continue;
+            if (optimal.g[k][l] <= g)
+                return;
+        }
+        // this sequence might be part of the final optimal sequence.
+        optimal.g[k][l] = g;
+        optimal.m[k][l] = match;
+        optimal.pi[k][l] = pi;
     };
-    Scoring.regexGuesses = function (match) {
-        return 0;
+    /**
+     * evaluate bruteforce matches ending at k.
+     */
+    Scoring.bruteforceUpdate = function (password, optimal, k, excludeAdditive) {
+        // see if a single bruteforce match spanning the k-prefix is optimal.
+        var match = this.makeBruteforceMatch(password, 0, k);
+        this.updateOptimal(password, optimal, match, 1, excludeAdditive);
+        for (var i = 1; i <= k; i++) {
+            // generate k bruteforce matches, spanning from (i=1, j=k) up to (i=k, j=k).
+            // see if adding these new matches to any of the sequences in optimal[i-1]
+            // leads to new bests.
+            match = this.makeBruteforceMatch(password, i, k);
+            for (var l in optimal.m[i - 1]) {
+                var lastMatch = optimal.m[i - 1][l];
+                // corner: an optimal sequence will never have two adjacent bruteforce matches.
+                // it is strictly better to have a single bruteforce match spanning the same region:
+                // same contribution to the guess product with a lower length.
+                // --> safe to skip those cases.
+                if (lastMatch.pattern === "bruteforce")
+                    continue;
+                this.updateOptimal(password, optimal, match, parseInt(l) + 1, excludeAdditive);
+            }
+        }
     };
-    Scoring.dateGuesses = function (match) {
-        return 0;
+    /**
+     * make bruteforce match objects spanning i to j, inclusive.
+     */
+    Scoring.makeBruteforceMatch = function (password, i, j) {
+        return {
+            pattern: "bruteforce",
+            token: password.slice(i, j + 1),
+            i: i,
+            j: j
+        };
+    };
+    Scoring.unwind = function (optimal, n) {
+        var optimalMatchSequence = new Array();
+        var k = n - 1;
+        // find the final best sequence length and score
+        var l;
+        var g = Infinity;
+        for (var key in optimal.g[k]) {
+            var candidateL = parseInt(key);
+            var candidateG = optimal.g[k][candidateL];
+            if (candidateG >= g)
+                continue;
+            l = candidateL;
+            g = candidateG;
+        }
+        while (k >= 0) {
+            var match = optimal.m[k][l];
+            optimalMatchSequence.unshift(match);
+            k = match.i - 1;
+            l--;
+        }
+        return optimalMatchSequence;
     };
     /**
      * search most guessable match sequence
@@ -454,8 +591,9 @@ var Scoring = (function () {
         var _this = this;
         if (excludeAdditive === void 0) { excludeAdditive = false; }
         var n = password.length;
+        var baseArray = Array.apply({}, new Array(n));
         // partition matches into sublists according to ending index j
-        var matchesByJ = Array.apply({}, new Array(n)).map(function (i) { return []; });
+        var matchesByJ = baseArray.map(function (i) { return []; });
         matches.forEach(function (match) { return matchesByJ[match.j].push(match); });
         // small detail: for deterministic output, sort each sublist by i.
         matchesByJ.forEach(function (list) { return list.sort(function (m1, m2) { return m1.i - m2.i; }); });
@@ -464,64 +602,55 @@ var Scoring = (function () {
             // password prefix up to k, inclusive.
             // if there is no length-l sequence that scores better (fewer guesses) than
             // a shorter match sequence spanning the same prefix, optimal.m[k][l] is undefined.
-            m: Array.apply({}, new Array(n)),
+            m: baseArray.map(function (i) { return []; }),
             // same structure as optimal.m -- holds the product term Prod(m.guesses for m in sequence).
             // optimal.pi allows for fast (non-looping) updates to the minimization function.
-            pi: Array.apply({}, new Array(n)),
+            pi: baseArray.map(function (i) { return []; }),
             // same structure as optimal.m -- holds the overall metric.
-            g: Array.apply({}, new Array(n))
+            g: baseArray.map(function (i) { return []; })
         };
-        // helper: considers whether a length-l sequence ending at match m is better (fewer guesses)
-        // than previously encountered sequences, updating state if so.
-        var update = function (match, l) {
-            var k = match.j;
-            var pi = _this.estimateGuesses(password, match);
-        };
+        for (var k = 0; k < n; k++) {
+            matchesByJ[k].forEach(function (match) {
+                if (match.i > 0) {
+                    for (var l in optimal.m[match.i - 1])
+                        _this.updateOptimal(password, optimal, match, parseInt(l) + 1, excludeAdditive);
+                }
+                else {
+                    _this.updateOptimal(password, optimal, match, 1, excludeAdditive);
+                }
+            });
+            this.bruteforceUpdate(password, optimal, k, excludeAdditive);
+        }
+        var optimalMatchSequence = this.unwind(optimal, n);
+        var optimalL = optimalMatchSequence.length;
+        var guesses = 1;
+        // corner: empty password
+        if (password.length > 0)
+            guesses = optimal.g[n - 1][optimalL];
         return {
-            sequence: undefined,
-            guesses: 0
+            password: password,
+            sequence: optimalMatchSequence,
+            guesses: guesses,
+            guessesLog10: helpers_1.Helpers.log10(guesses)
         };
     };
     return Scoring;
 }());
 Scoring.estimationFunctions = {
     "bruteforce": new bruteforce_1.BruteforceCalculator(),
+    "dictionary": new dictionary_1.DictionaryCalculator(),
+    "date": new date_1.DateCalculator(),
+    "regex": new regex_1.RegexCalculator(),
     "repeat": new repeat_1.RepeatCalculator(),
-    "sequence": new sequence_1.SequenceCalculator()
-    // "bruteforce": this.bruteforceGuesses,
-    // "dictionary": this.dictionaryGuesses,
-    // "spatial": this.spatialGuesses,
-    // "repeat": this.repeatGuesses,
-    // "sequence": this.sequenceGuesses,
-    // "regex": this.regexGuesses,
-    // "date": this.dateGuesses
-};
-Scoring.nCk = function (n, k) {
-    // http://blog.plover.com/math/choose.html
-    if (k > n)
-        return 0;
-    if (k === 0)
-        return 1;
-    var r = 1;
-    for (var d = 1; d < k; d++) {
-        r *= n;
-        r /= d;
-        n -= 1;
-    }
-    return r;
-};
-Scoring.log10 = function (n) {
-    return Math.log(n) / Math.log(10);
-};
-Scoring.log2 = function (n) {
-    return Math.log(n) / Math.log(2);
+    "sequence": new sequence_1.SequenceCalculator(),
+    "spatial": new spatial_1.SpatialCalculator()
 };
 /** unoptimized, called only on small n */
 Scoring.factorial = function (n) {
     if (n < 2)
         return 1;
     var f = 1;
-    for (var i = 2; i < n; i++)
+    for (var i = 2; i <= n; i++)
         f *= i;
     return f;
 };
@@ -567,7 +696,6 @@ var Zxcvbn = (function () {
         this.matching.setUserInputDictionary(userInputs);
         // Get matches
         var matches = this.matching.omnimatch(password);
-        console.log(matches);
         // Get result
         var result = scoring_1.Scoring.mostGuessableMatchSequence(password, matches);
         result.feedback = "none";
@@ -680,7 +808,7 @@ var Matching = (function () {
     Matching.prototype.buildRankedDictionary = function (orderedList) {
         var result = {};
         orderedList.forEach(function (word, index) {
-            result[word] = index;
+            result[word] = index + 1;
         });
         return result;
     };
@@ -1357,7 +1485,7 @@ var SequenceMatcher = (function () {
         var lastDelta;
         var i = 0;
         var j = 0;
-        for (var k = 1; k <= password.length; k++) {
+        for (var k = 1; k < password.length; k++) {
             var delta = password.charCodeAt(k) - password.charCodeAt(k - 1);
             if (!lastDelta)
                 lastDelta = delta;
@@ -1511,6 +1639,131 @@ exports.BruteforceCalculator = BruteforceCalculator;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var DateCalculator = (function () {
+    function DateCalculator() {
+    }
+    DateCalculator.prototype.estimate = function (match) {
+        // base guesses: (year distance from REFERENCE_YEAR) * num_days * num_years
+        var yearSpace = Math.max(Math.abs(match.year - constants_1.REFERENCE_YEAR), constants_1.MIN_YEAR_SPACE);
+        var guesses = yearSpace * 365;
+        // add factor of 4 for separator selection (one of ~4 choices)
+        if (match.separator)
+            guesses *= 4;
+        return guesses;
+    };
+    return DateCalculator;
+}());
+exports.DateCalculator = DateCalculator;
+
+
+/***/ }),
+/* 17 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var helpers_1 = __webpack_require__(1);
+var DictionaryCalculator = (function () {
+    function DictionaryCalculator() {
+    }
+    DictionaryCalculator.prototype.countUppercaseVariations = function (match) {
+        var word = match.token;
+        if (constants_1.REGEX_ALL_LOWER.test(word) || word.toLowerCase() === word)
+            return 1;
+        // a capitalized word is the most common capitalization scheme,
+        // so it only doubles the search space (uncapitalized + capitalized).
+        // allcaps and end-capitalized are common enough too, underestimate as 2x factor to be safe.
+        var regexList = [constants_1.REGEX_START_UPPER, constants_1.REGEX_END_UPPER, constants_1.REGEX_ALL_UPPER];
+        if (regexList.some(function (regex) { return regex.test(word); }))
+            return 2;
+        // otherwise calculate the number of ways to capitalize U+L uppercase+lowercase letters
+        // with U uppercase letters or less. or, if there's more uppercase than lower (for eg. PASSwORD),
+        // the number of ways to lowercase U+L letters with L lowercase letters or less.
+        var U = word.split("").filter(function (chr) { return /[A-Z]/.test(chr); }).length;
+        var L = word.split("").filter(function (chr) { return /[a-z]/.test(chr); }).length;
+        var variations = 0;
+        for (var i = 1; i <= U && i <= L; i++)
+            variations += helpers_1.Helpers.nCk(U + L, i);
+        return variations;
+    };
+    DictionaryCalculator.prototype.countL33tVariations = function (match) {
+        var variations = 1;
+        if (!match.l33t)
+            return variations;
+        var _loop_1 = function (subbed) {
+            var unsubbed = match.sub[subbed];
+            // lower-case match.token before calculating: capitalization shouldn't affect l33t calc
+            var chrs = match.token.toLowerCase().split("");
+            var S = chrs.filter(function (chr) { return chr === subbed; }).length;
+            var U = chrs.filter(function (chr) { return chr === unsubbed; }).length;
+            if (S === 0 || U === 0) {
+                // for this sub, password is either fully subbed (444) or fully unsubbed (aaa)
+                // treat that as doubling the space (attacker needs to try fully subbed chars in addition to
+                // unsubbed.)
+                variations *= 2;
+            }
+            else {
+                // this case is similar to capitalization:
+                // with aa44a, U = 3, S = 2, attacker needs to try unsubbed + one sub + two subs
+                var possibilities = 0;
+                for (var i = 1; i <= U && i <= S; i++)
+                    possibilities += helpers_1.Helpers.nCk(U + S, i);
+                variations *= possibilities;
+            }
+        };
+        for (var subbed in match.sub) {
+            _loop_1(subbed);
+        }
+        return variations;
+    };
+    DictionaryCalculator.prototype.estimate = function (match) {
+        match.baseGuesses = match.rank;
+        match.uppercaseVariations = this.countUppercaseVariations(match);
+        match.l33tVariations = this.countL33tVariations(match);
+        var reversedVariations = match.reversed ? 2 : 1;
+        return match.baseGuesses * match.uppercaseVariations * match.l33tVariations * reversedVariations;
+    };
+    return DictionaryCalculator;
+}());
+exports.DictionaryCalculator = DictionaryCalculator;
+
+
+/***/ }),
+/* 18 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var RegexCalculator = (function () {
+    function RegexCalculator() {
+    }
+    RegexCalculator.prototype.estimate = function (match) {
+        switch (match.regexName) {
+            case "recentYear":
+                // conservative estimate of year space: num years from REFERENCE_YEAR.
+                // if year is close to REFERENCE_YEAR, estimate a year space of MIN_YEAR_SPACE.
+                var yearSpace = Math.abs(parseInt(match.regexpMatch[0]) - constants_1.REFERENCE_YEAR);
+                yearSpace = Math.max(yearSpace, constants_1.MIN_YEAR_SPACE);
+                return yearSpace;
+        }
+    };
+    return RegexCalculator;
+}());
+exports.RegexCalculator = RegexCalculator;
+
+
+/***/ }),
+/* 19 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
 var RepeatCalculator = (function () {
     function RepeatCalculator() {
     }
@@ -1523,7 +1776,7 @@ exports.RepeatCalculator = RepeatCalculator;
 
 
 /***/ }),
-/* 17 */
+/* 20 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -1552,6 +1805,59 @@ var SequenceCalculator = (function () {
     return SequenceCalculator;
 }());
 exports.SequenceCalculator = SequenceCalculator;
+
+
+/***/ }),
+/* 21 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", { value: true });
+var constants_1 = __webpack_require__(0);
+var helpers_1 = __webpack_require__(1);
+var SpatialCalculator = (function () {
+    function SpatialCalculator() {
+    }
+    SpatialCalculator.prototype.estimate = function (match) {
+        var s, d;
+        if (match.graph === "qwerty" || match.graph === "dvorak") {
+            s = constants_1.KEYBOARD_STARTING_POSITIONS;
+            d = constants_1.KEYBOARD_AVERAGE_DEGREE;
+        }
+        else {
+            s = constants_1.KEYPAD_STARTING_POSITIONS;
+            d = constants_1.KEYPAD_AVERAGE_DEGREE;
+        }
+        var guesses = 0;
+        var L = match.token.length;
+        var t = match.turns;
+        for (var i = 2; i <= L; i++) {
+            var possibleTurns = Math.min(t, i - 1);
+            for (var j = 1; j <= possibleTurns; j++) {
+                guesses += helpers_1.Helpers.nCk(i - 1, j - 1) * s * Math.pow(d, j);
+            }
+        }
+        if (match.shiftedCount) {
+            // add extra guesses for shifted keys. (% instead of 5, A instead of a.)
+            // math is similar to extra guesses of l33t substitutions in dictionary matches.
+            var S = match.shiftedCount;
+            var U = match.token.length - S; // unshifted count
+            if (S === 0 || U === 0) {
+                guesses *= 2;
+            }
+            else {
+                var shiftedVariations = 0;
+                for (var i = 1; i <= S && i <= U; i++)
+                    shiftedVariations += helpers_1.Helpers.nCk(S + U, i);
+                guesses *= shiftedVariations;
+            }
+        }
+        return guesses;
+    };
+    return SpatialCalculator;
+}());
+exports.SpatialCalculator = SpatialCalculator;
 
 
 /***/ })

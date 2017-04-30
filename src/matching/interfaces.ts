@@ -1,5 +1,5 @@
 export interface IMatch {
-  pattern: "date" | "dictionary" | "regex" | "repeat" | "spatial" | "sequence";
+  pattern: "bruteforce" | "date" | "dictionary" | "regex" | "repeat" | "spatial" | "sequence";
   i: number;
   j: number;
   token: string;

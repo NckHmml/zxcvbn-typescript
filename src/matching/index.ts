@@ -36,7 +36,7 @@ export class Matching {
     const result: { [word: string]: number } = {};
 
     orderedList.forEach((word, index) => {
-      result[word] = index;
+      result[word] = index + 1;
     });
 
     return result;

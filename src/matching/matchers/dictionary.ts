@@ -7,6 +7,9 @@ export interface IDictionaryMatch extends IMatch {
   dictionaryName: string;
   reversed: boolean;
   l33t: boolean;
+  baseGuesses?: number;
+  uppercaseVariations?: number;
+  l33tVariations?: number;
 }
 
 /**
