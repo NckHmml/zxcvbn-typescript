@@ -15,6 +15,7 @@ import { SpatialMatcher } from "./matchers/spatial";
 
 export class Matching {
   private RankedDictionaries: IRankedDictionaries = {};
+  private Matchers: Array<IMatcher>;
 
   constructor(frequencyList = FREQUENCY_LIST) {
     // Loads the json if it's an external build
@@ -27,6 +28,19 @@ export class Matching {
       const list = frequencyList[name].split(",");
       this.RankedDictionaries[name] = this.buildRankedDictionary(list);
     }
+
+    // Build matchers
+    const dictionaryMatcher = new DictionaryMatcher(this.RankedDictionaries);
+    this.Matchers = [
+      new DateMatcher(),
+      dictionaryMatcher,
+      new ReverseDictionaryMatcher(this.RankedDictionaries),
+      new L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
+      new RegexMatcher(),
+      new RepeatMatcher(this),
+      new SequenceMatcher(),
+      new SpatialMatcher()
+    ];
   }
 
   /**
@@ -55,20 +69,8 @@ export class Matching {
    * @param password password to match with
    */
   public omnimatch(password: string): Array<IMatch> {
-    const dictionaryMatcher = new DictionaryMatcher(this.RankedDictionaries);
-
-    const matchers: Array<IMatcher> = [
-      new DateMatcher(),
-      dictionaryMatcher,
-      new ReverseDictionaryMatcher(this.RankedDictionaries),
-      new L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
-      new RegexMatcher(),
-      new RepeatMatcher(this),
-      new SequenceMatcher(),
-      new SpatialMatcher()
-    ];
     // Run matchers
-    const matches: Array<IMatch> = matchers
+    const matches: Array<IMatch> = this.Matchers
       .map(matcher => matcher.match(password))
       .reduce((previous, next) => previous.concat(next));
     return Helpers.sortMatches(matches);

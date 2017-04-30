@@ -801,6 +801,18 @@ var Matching = (function () {
             var list = frequencyList[name_1].split(",");
             this.RankedDictionaries[name_1] = this.buildRankedDictionary(list);
         }
+        // Build matchers
+        var dictionaryMatcher = new dictionary_1.DictionaryMatcher(this.RankedDictionaries);
+        this.Matchers = [
+            new date_1.DateMatcher(),
+            dictionaryMatcher,
+            new reverseDictionary_1.ReverseDictionaryMatcher(this.RankedDictionaries),
+            new l33t_1.L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
+            new regex_1.RegexMatcher(),
+            new repeat_1.RepeatMatcher(this),
+            new sequence_1.SequenceMatcher(),
+            new spatial_1.SpatialMatcher()
+        ];
     }
     /**
      * Builds the ranked dictionary
@@ -824,19 +836,8 @@ var Matching = (function () {
      * @param password password to match with
      */
     Matching.prototype.omnimatch = function (password) {
-        var dictionaryMatcher = new dictionary_1.DictionaryMatcher(this.RankedDictionaries);
-        var matchers = [
-            new date_1.DateMatcher(),
-            dictionaryMatcher,
-            new reverseDictionary_1.ReverseDictionaryMatcher(this.RankedDictionaries),
-            new l33t_1.L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
-            new regex_1.RegexMatcher(),
-            new repeat_1.RepeatMatcher(this),
-            new sequence_1.SequenceMatcher(),
-            new spatial_1.SpatialMatcher()
-        ];
         // Run matchers
-        var matches = matchers
+        var matches = this.Matchers
             .map(function (matcher) { return matcher.match(password); })
             .reduce(function (previous, next) { return previous.concat(next); });
         return helpers_1.Helpers.sortMatches(matches);
