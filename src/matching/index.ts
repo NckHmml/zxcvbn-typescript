@@ -18,29 +18,43 @@ export class Matching {
   private Matchers: Array<IMatcher>;
 
   constructor(frequencyList = FREQUENCY_LIST) {
+    const build = () => {
+      // Build the ranked dictionary
+      for (const name in frequencyList) {
+        const list = frequencyList[name].split(",");
+        this.RankedDictionaries[name] = this.buildRankedDictionary(list);
+      }
+
+      // Build matchers
+      const dictionaryMatcher = new DictionaryMatcher(this.RankedDictionaries);
+      this.Matchers = [
+        new DateMatcher(),
+        dictionaryMatcher,
+        new ReverseDictionaryMatcher(this.RankedDictionaries),
+        new L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
+        new RegexMatcher(),
+        new RepeatMatcher(this),
+        new SequenceMatcher(),
+        new SpatialMatcher()
+      ];
+    };
+
     // Loads the json if it's an external build
     if (frequencyList === undefined) {
-      // ToDo: magically load frequency_list.json
-      console.log("ToDo: magically load frequency_list.json at:", Checker.config.frequencyList);
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", Checker.config.frequencyList, true);
+      xhr.responseType = "json";
+      xhr.onload = () => {
+        const status = xhr.status;
+        if (status === 200) {
+          frequencyList = xhr.response;
+        }
+        build();
+      };
+      xhr.send();
+    } else {
+      build();
     }
-    // Build the ranked dictionary
-    for (const name in frequencyList) {
-      const list = frequencyList[name].split(",");
-      this.RankedDictionaries[name] = this.buildRankedDictionary(list);
-    }
-
-    // Build matchers
-    const dictionaryMatcher = new DictionaryMatcher(this.RankedDictionaries);
-    this.Matchers = [
-      new DateMatcher(),
-      dictionaryMatcher,
-      new ReverseDictionaryMatcher(this.RankedDictionaries),
-      new L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
-      new RegexMatcher(),
-      new RepeatMatcher(this),
-      new SequenceMatcher(),
-      new SpatialMatcher()
-    ];
   }
 
   /**

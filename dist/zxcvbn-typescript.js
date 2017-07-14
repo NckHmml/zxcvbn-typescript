@@ -792,29 +792,44 @@ var spatial_1 = __webpack_require__(14);
 var Matching = (function () {
     function Matching(frequencyList) {
         if (frequencyList === void 0) { frequencyList = lists_1.FREQUENCY_LIST; }
+        var _this = this;
         this.RankedDictionaries = {};
+        var build = function () {
+            // Build the ranked dictionary
+            for (var name_1 in frequencyList) {
+                var list = frequencyList[name_1].split(",");
+                _this.RankedDictionaries[name_1] = _this.buildRankedDictionary(list);
+            }
+            // Build matchers
+            var dictionaryMatcher = new dictionary_1.DictionaryMatcher(_this.RankedDictionaries);
+            _this.Matchers = [
+                new date_1.DateMatcher(),
+                dictionaryMatcher,
+                new reverseDictionary_1.ReverseDictionaryMatcher(_this.RankedDictionaries),
+                new l33t_1.L33tMatcher(_this.RankedDictionaries, dictionaryMatcher),
+                new regex_1.RegexMatcher(),
+                new repeat_1.RepeatMatcher(_this),
+                new sequence_1.SequenceMatcher(),
+                new spatial_1.SpatialMatcher()
+            ];
+        };
         // Loads the json if it's an external build
         if (frequencyList === undefined) {
-            // ToDo: magically load frequency_list.json
-            console.log("ToDo: magically load frequency_list.json at:", _1.Checker.config.frequencyList);
+            var xhr_1 = new XMLHttpRequest();
+            xhr_1.open("GET", _1.Checker.config.frequencyList, true);
+            xhr_1.responseType = "json";
+            xhr_1.onload = function () {
+                var status = xhr_1.status;
+                if (status === 200) {
+                    frequencyList = xhr_1.response;
+                }
+                build();
+            };
+            xhr_1.send();
         }
-        // Build the ranked dictionary
-        for (var name_1 in frequencyList) {
-            var list = frequencyList[name_1].split(",");
-            this.RankedDictionaries[name_1] = this.buildRankedDictionary(list);
+        else {
+            build();
         }
-        // Build matchers
-        var dictionaryMatcher = new dictionary_1.DictionaryMatcher(this.RankedDictionaries);
-        this.Matchers = [
-            new date_1.DateMatcher(),
-            dictionaryMatcher,
-            new reverseDictionary_1.ReverseDictionaryMatcher(this.RankedDictionaries),
-            new l33t_1.L33tMatcher(this.RankedDictionaries, dictionaryMatcher),
-            new regex_1.RegexMatcher(),
-            new repeat_1.RepeatMatcher(this),
-            new sequence_1.SequenceMatcher(),
-            new spatial_1.SpatialMatcher()
-        ];
     }
     /**
      * Builds the ranked dictionary
