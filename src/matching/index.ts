@@ -1,7 +1,7 @@
 import { FREQUENCY_LIST, ADJACENCY_GRAPHS } from "../lists";
 import { Scoring } from "../scoring";
 import { Helpers } from "../helpers";
-import { Zxcvbn } from "../";
+import { Checker } from "../";
 
 import { IMatch, IMatcher, IRankedDictionaries } from "./interfaces";
 import { DateMatcher } from "./matchers/date";
@@ -21,7 +21,7 @@ export class Matching {
     // Loads the json if it's an external build
     if (frequencyList === undefined) {
       // ToDo: magically load frequency_list.json
-      console.log("ToDo: magically load frequency_list.json at:", Zxcvbn.config.frequencyList);
+      console.log("ToDo: magically load frequency_list.json at:", Checker.config.frequencyList);
     }
     // Build the ranked dictionary
     for (const name in frequencyList) {

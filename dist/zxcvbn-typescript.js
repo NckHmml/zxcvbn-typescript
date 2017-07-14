@@ -2,11 +2,11 @@
 	if(typeof exports === 'object' && typeof module === 'object')
 		module.exports = factory();
 	else if(typeof define === 'function' && define.amd)
-		define([], factory);
-	else {
-		var a = factory();
-		for(var i in a) (typeof exports === 'object' ? exports : root)[i] = a[i];
-	}
+		define("Zxcvbn", [], factory);
+	else if(typeof exports === 'object')
+		exports["Zxcvbn"] = factory();
+	else
+		root["Zxcvbn"] = factory();
 })(this, function() {
 return /******/ (function(modules) { // webpackBootstrap
 /******/ 	// The module cache
@@ -634,26 +634,26 @@ var Scoring = (function () {
             guessesLog10: helpers_1.Helpers.log10(guesses)
         };
     };
+    Scoring.estimationFunctions = {
+        "bruteforce": new bruteforce_1.BruteforceCalculator(),
+        "dictionary": new dictionary_1.DictionaryCalculator(),
+        "date": new date_1.DateCalculator(),
+        "regex": new regex_1.RegexCalculator(),
+        "repeat": new repeat_1.RepeatCalculator(),
+        "sequence": new sequence_1.SequenceCalculator(),
+        "spatial": new spatial_1.SpatialCalculator()
+    };
+    /** unoptimized, called only on small n */
+    Scoring.factorial = function (n) {
+        if (n < 2)
+            return 1;
+        var f = 1;
+        for (var i = 2; i <= n; i++)
+            f *= i;
+        return f;
+    };
     return Scoring;
 }());
-Scoring.estimationFunctions = {
-    "bruteforce": new bruteforce_1.BruteforceCalculator(),
-    "dictionary": new dictionary_1.DictionaryCalculator(),
-    "date": new date_1.DateCalculator(),
-    "regex": new regex_1.RegexCalculator(),
-    "repeat": new repeat_1.RepeatCalculator(),
-    "sequence": new sequence_1.SequenceCalculator(),
-    "spatial": new spatial_1.SpatialCalculator()
-};
-/** unoptimized, called only on small n */
-Scoring.factorial = function (n) {
-    if (n < 2)
-        return 1;
-    var f = 1;
-    for (var i = 2; i <= n; i++)
-        f *= i;
-    return f;
-};
 exports.Scoring = Scoring;
 
 
@@ -667,10 +667,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var config_1 = __webpack_require__(6);
 var matching_1 = __webpack_require__(7);
 var scoring_1 = __webpack_require__(3);
-var Zxcvbn = (function () {
-    function Zxcvbn() {
+var Checker = (function () {
+    function Checker() {
     }
-    Object.defineProperty(Zxcvbn, "matching", {
+    Object.defineProperty(Checker, "matching", {
         get: function () {
             // Lazy loading
             if (!this._matching)
@@ -688,7 +688,7 @@ var Zxcvbn = (function () {
      * @param password password to check
      * @param userInputs additional dictionary information
      */
-    Zxcvbn.check = function (password, userInputs) {
+    Checker.check = function (password, userInputs) {
         if (userInputs === void 0) { userInputs = []; }
         var start = new Date().getTime();
         // Sanitize and set user inputs
@@ -702,11 +702,13 @@ var Zxcvbn = (function () {
         result.calc_time = new Date().getTime() - start;
         return result;
     };
-    return Zxcvbn;
+    // Expose config
+    Checker.config = config_1.Config;
+    return Checker;
 }());
-// Expose config
-Zxcvbn.config = config_1.Config;
-exports.Zxcvbn = Zxcvbn;
+exports.Checker = Checker;
+// Expose check function global
+exports.check = Checker.check.bind(Checker);
 
 
 /***/ }),
@@ -794,7 +796,7 @@ var Matching = (function () {
         // Loads the json if it's an external build
         if (frequencyList === undefined) {
             // ToDo: magically load frequency_list.json
-            console.log("ToDo: magically load frequency_list.json at:", _1.Zxcvbn.config.frequencyList);
+            console.log("ToDo: magically load frequency_list.json at:", _1.Checker.config.frequencyList);
         }
         // Build the ranked dictionary
         for (var name_1 in frequencyList) {

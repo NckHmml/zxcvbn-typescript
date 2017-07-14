@@ -30,6 +30,7 @@ const webpack_release = {
   output: {
     path: `${__dirname}/dist`,
     filename: `${filename}.min.js`,
+    library: "Zxcvbn",
     libraryTarget: "umd",
     umdNamedDefine: true
   },
@@ -47,6 +48,7 @@ const webpack_develop = {
   output: {
     path: `${__dirname}/dist`,
     filename: `${filename}.js`,
+    library: "Zxcvbn",
     libraryTarget: "umd",
     umdNamedDefine: true
   },
@@ -63,6 +65,7 @@ const webpack_external = {
   output: {
     path: `${__dirname}/dist`,
     filename: `${filename}.external.js`,
+    library: "Zxcvbn",
     libraryTarget: "umd",
     umdNamedDefine: true
   },
@@ -81,6 +84,7 @@ const webpack_debug = {
   output: {
     path: `${__dirname}/dist`,
     filename: `${filename}.js`,
+    library: "Zxcvbn",
     libraryTarget: "umd",
     umdNamedDefine: true
   },

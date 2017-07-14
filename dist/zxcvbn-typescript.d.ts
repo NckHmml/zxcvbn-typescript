@@ -9,7 +9,7 @@ declare module 'zxcvbn-typescript' {
         feedback: string;
         calc_time: number;
     }
-    export class Zxcvbn {
+    export class Checker {
         static matching: Matching;
         static config: {
             frequencyList: string;
@@ -21,6 +21,7 @@ declare module 'zxcvbn-typescript' {
           */
         static check(password: string, userInputs?: Array<string>): IResult;
     }
+    export const check: (password: string, userInputs?: Array<string>) => IResult;
 }
 
 declare module 'zxcvbn-typescript/matching' {

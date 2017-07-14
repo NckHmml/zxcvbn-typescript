@@ -8,7 +8,7 @@ export interface IResult extends IScoringResult {
   calc_time: number;
 }
 
-export class Zxcvbn {
+export class Checker {
   private static _matching: Matching;
   public static get matching(): Matching {
     // Lazy loading
@@ -45,3 +45,7 @@ export class Zxcvbn {
     return result;
   }
 }
+
+// Expose check function global
+export const check: (password: string, userInputs?: Array<string>) => IResult =
+  Checker.check.bind(Checker);
